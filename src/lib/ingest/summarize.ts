@@ -18,13 +18,50 @@ export type Extraction = {
 
 const MAX_PROMPT_CHARS = 30_000;
 const TOOL_NAME = "record_analysis";
+const MAX_KEY_CLAIMS = 8;
+const MAX_TAGS = 15;
+
+/** The model is told to return arrays, and usually does -- but it intermittently
+ *  serializes them as a JSON string ('["a","b"]') or a delimited string instead.
+ *  Rejecting that outright fails an otherwise perfectly good analysis, so coerce.
+ *
+ *  `commaSplit` is off for prose: claim sentences legitimately contain commas, so
+ *  those only ever split on line/bullet boundaries. */
+export function toStringArray(value: unknown, commaSplit: boolean): unknown {
+  if (Array.isArray(value)) return value;
+  if (typeof value !== "string") return value;
+
+  const raw = value.trim();
+  if (!raw) return [];
+
+  if (raw.startsWith("[")) {
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed;
+    } catch {
+      // Not valid JSON after all -- fall through to delimiter splitting.
+    }
+  }
+
+  const lines = raw.split(/\r?\n+/).map((l) => l.trim()).filter(Boolean);
+  const parts = lines.length > 1 || !commaSplit ? lines : raw.split(/[,;]+/);
+
+  return parts
+    .map((part) => part.replace(/^\s*(?:[-*\u2022]|\d+[.)])\s*/, "").trim())
+    .filter(Boolean);
+}
+
+const prose = (v: unknown) => toStringArray(v, false);
+const keywords = (v: unknown) => toStringArray(v, true);
 
 const extractionSchema = z.object({
   title: z.string().min(1),
   summary: z.string().min(1),
-  keyClaims: z.array(z.string().min(1)).min(1).max(8),
-  tags: z.array(z.string().min(1)).min(1).max(15),
-  authors: z.array(z.string().min(1)).default([]),
+  // Counts are intentionally unbounded here and sliced after parsing: an extra
+  // claim or tag is not a reason to throw away the whole analysis.
+  keyClaims: z.preprocess(prose, z.array(z.string().min(1)).min(1)),
+  tags: z.preprocess(keywords, z.array(z.string().min(1)).min(1)),
+  authors: z.preprocess(keywords, z.array(z.string().min(1))).default([]),
   org: z.string().nullish().transform((v) => v || null),
   venue: z.string().nullish().transform((v) => v || null),
   publishedAt: z.string().nullish().transform((v) => v || null),
@@ -158,6 +195,9 @@ export async function summarize(content: ExtractedContent): Promise<Extraction> 
     publishedAt: content.publishedAt ?? data.publishedAt,
     venue: content.venue ?? data.venue,
     org: content.org ?? data.org,
-    tags: Array.from(new Set(data.tags.map((t) => t.toLowerCase().trim()))).filter(Boolean),
+    keyClaims: data.keyClaims.slice(0, MAX_KEY_CLAIMS),
+    tags: Array.from(new Set(data.tags.map((t) => t.toLowerCase().trim())))
+      .filter(Boolean)
+      .slice(0, MAX_TAGS),
   };
 }
