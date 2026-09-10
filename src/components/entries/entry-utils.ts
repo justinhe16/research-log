@@ -130,3 +130,15 @@ export const STATUS_LABELS: Record<string, string> = {
 export function statusLabel(status: string): string {
   return STATUS_LABELS[status] ?? status;
 }
+
+/** Metadata values come from an LLM, which sometimes emits the *string* "null",
+ *  "none", "unknown" or "n/a" rather than a real null. Those pass a truthy check
+ *  and render as literal junk text, so scrub them at the display boundary. */
+const EMPTY_META = new Set(["null", "undefined", "none", "n/a", "na", "unknown", "-", ""]);
+
+export function cleanMetaValue(value: string | null | undefined): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  if (EMPTY_META.has(trimmed.toLowerCase())) return null;
+  return trimmed;
+}

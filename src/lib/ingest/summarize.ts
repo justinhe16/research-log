@@ -54,6 +54,17 @@ export function toStringArray(value: unknown, commaSplit: boolean): unknown {
 const prose = (v: unknown) => toStringArray(v, false);
 const keywords = (v: unknown) => toStringArray(v, true);
 
+/** The model sometimes fills an optional field with the *string* "null" (or
+ *  "none"/"n/a") instead of omitting it. Persisting that means every consumer
+ *  has to defend against it, so normalize to a real null at the boundary. */
+const NOT_A_VALUE = new Set(["null", "undefined", "none", "n/a", "na", "unknown", "-", ""]);
+
+function nullableText(value: string | null | undefined): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return NOT_A_VALUE.has(trimmed.toLowerCase()) ? null : trimmed;
+}
+
 const extractionSchema = z.object({
   title: z.string().min(1),
   summary: z.string().min(1),
@@ -62,9 +73,9 @@ const extractionSchema = z.object({
   keyClaims: z.preprocess(prose, z.array(z.string().min(1)).min(1)),
   tags: z.preprocess(keywords, z.array(z.string().min(1)).min(1)),
   authors: z.preprocess(keywords, z.array(z.string().min(1))).default([]),
-  org: z.string().nullish().transform((v) => v || null),
-  venue: z.string().nullish().transform((v) => v || null),
-  publishedAt: z.string().nullish().transform((v) => v || null),
+  org: z.string().nullish().transform(nullableText),
+  venue: z.string().nullish().transform(nullableText),
+  publishedAt: z.string().nullish().transform(nullableText),
   contentType: z.enum(CONTENT_TYPES),
   category: z.enum(CATEGORIES),
 });

@@ -127,9 +127,9 @@ export function EntryRow({ entry, onOpen, onRetry }: EntryRowProps) {
           <span className="text-muted-foreground/50 text-xs">—</span>
         ) : (
           <div className="flex flex-wrap items-center gap-1">
-            {visibleTags.map((tag) => (
+            {visibleTags.map((tag, ti) => (
               <Badge
-                key={tag}
+                key={`${ti}-${tag}`}
                 variant="outline"
                 className="border-border/60 text-muted-foreground max-w-32 rounded-md px-1.5 text-[11px] font-normal"
               >

@@ -36,16 +36,7 @@ import { api } from "@/lib/api-client";
 import { CATEGORIES, STATUSES } from "@/lib/constants";
 import type { Entry, RelatedEntry, UpdateEntryInput } from "@/lib/types";
 import { Rating } from "./rating";
-import {
-  displayTitle,
-  domainOf,
-  formatScore,
-  ingestLabel,
-  isIngestError,
-  isIngesting,
-  parseSummary,
-  statusLabel,
-} from "./entry-utils";
+import { cleanMetaValue, displayTitle, domainOf, formatScore, ingestLabel, isIngestError, isIngesting, parseSummary, statusLabel } from "./entry-utils";
 
 type EntryDetailDialogProps = {
   entry: Entry | null;
@@ -153,14 +144,25 @@ function EntryDetailBody({
   const ingesting = isIngesting(entry);
   const errored = isIngestError(entry);
 
-  // One quiet line of provenance, not a definition list.
+  // One quiet line of provenance, not a definition list. Values are deduped
+  // because org and venue are frequently the same string (a lab that is both
+  // publisher and venue), which would otherwise render twice and collide as keys.
   const meta: string[] = [];
-  if (entry.authors?.length) meta.push(entry.authors.join(", "));
-  if (entry.org) meta.push(entry.org);
-  if (entry.venue) meta.push(entry.venue);
-  if (entry.publishedAt) {
-    const date = new Date(entry.publishedAt);
-    meta.push(Number.isNaN(date.getTime()) ? entry.publishedAt : format(date, "d MMM yyyy"));
+  const pushMeta = (value: string | null | undefined) => {
+    const clean = cleanMetaValue(value);
+    if (clean && !meta.some((m) => m.toLowerCase() === clean.toLowerCase())) {
+      meta.push(clean);
+    }
+  };
+
+  pushMeta(entry.authors?.length ? entry.authors.join(", ") : null);
+  pushMeta(entry.org);
+  pushMeta(entry.venue);
+  if (cleanMetaValue(entry.publishedAt)) {
+    const date = new Date(entry.publishedAt as string);
+    pushMeta(
+      Number.isNaN(date.getTime()) ? entry.publishedAt : format(date, "d MMM yyyy"),
+    );
   }
 
   return (
@@ -185,8 +187,8 @@ function EntryDetailBody({
               <span className="capitalize">{entry.contentType}</span>
             </>
           ) : null}
-          {meta.map((item) => (
-            <span key={item} className="flex min-w-0 items-center gap-2">
+          {meta.map((item, i) => (
+            <span key={`${i}-${item}`} className="flex min-w-0 items-center gap-2">
               <Dot />
               <span className="truncate">{item}</span>
             </span>
@@ -275,9 +277,9 @@ function EntryDetailBody({
           {entry.tags?.length ? (
             <Section title="Tags">
               <div className="flex flex-wrap gap-1.5">
-                {entry.tags.map((tag) => (
+                {entry.tags.map((tag, ti) => (
                   <Badge
-                    key={tag}
+                    key={`${ti}-${tag}`}
                     variant="outline"
                     className="border-border/60 text-muted-foreground rounded-md px-1.5 text-[11px] font-normal"
                   >

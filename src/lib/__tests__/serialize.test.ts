@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { EntryRow } from "@/lib/db/schema";
 import { toEntry } from "@/lib/serialize";
+import { cleanMetaValue } from "@/components/entries/entry-utils";
 
 function row(overrides: Partial<EntryRow> = {}): EntryRow {
   return {
@@ -62,5 +63,24 @@ describe("toEntry", () => {
     expect(entry.notes).toBe("keep me");
     expect(entry.rating).toBe(4);
     expect(entry.createdAt).toBe("2026-01-01T00:00:00.000Z");
+  });
+});
+
+// Regression: model-emitted "null"/"n/a" strings passed truthy checks and
+// rendered as literal junk in the dialog's provenance line.
+describe("cleanMetaValue", () => {
+  it("strips model placeholder strings", () => {
+    for (const junk of ["null", "None", "N/A", "  unknown ", "-", ""]) {
+      expect(cleanMetaValue(junk)).toBeNull();
+    }
+  });
+
+  it("keeps and trims real values", () => {
+    expect(cleanMetaValue("  Thinking Machines Lab ")).toBe("Thinking Machines Lab");
+  });
+
+  it("handles null and undefined", () => {
+    expect(cleanMetaValue(null)).toBeNull();
+    expect(cleanMetaValue(undefined)).toBeNull();
   });
 });
