@@ -5,7 +5,14 @@ import { drizzle, type BetterSQLite3Database } from "drizzle-orm/better-sqlite3"
 import { migrate } from "drizzle-orm/better-sqlite3/migrator";
 import * as schema from "./schema";
 
-export const DB_PATH = path.resolve(process.env.DATABASE_PATH ?? "./data/research.db");
+const DB_FILE = process.env.DATABASE_PATH ?? "data/research.db";
+
+// path.join(process.cwd(), ...) rather than path.resolve(<dynamic>): the latter is
+// opaque to Turbopack's static analysis, which then traces the entire project into
+// the server bundle.
+export const DB_PATH = path.isAbsolute(DB_FILE)
+  ? DB_FILE
+  : path.join(/* turbopackIgnore: true */ process.cwd(), DB_FILE);
 
 type Db = BetterSQLite3Database<typeof schema> & { $client: Database.Database };
 
@@ -25,7 +32,7 @@ function create(): Db {
 
   // Apply any pending migrations at boot so a fresh clone (or a restored
   // backup from an older schema) is immediately usable.
-  const migrationsFolder = path.resolve("./drizzle");
+  const migrationsFolder = path.join(process.cwd(), "drizzle");
   if (fs.existsSync(migrationsFolder)) {
     migrate(db, { migrationsFolder });
   }
