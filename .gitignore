@@ -39,3 +39,12 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# --- research-log ---
+# Local database + backups: personal data, never committed.
+/data
+/backups
+.env.local
+# transformers.js model cache
+/.cache
+/models
