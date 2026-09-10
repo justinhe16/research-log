@@ -1,11 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { Loader2Icon, PlusIcon, SparklesIcon } from "lucide-react";
+import { LinkIcon, Loader2Icon, SparklesIcon } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -17,6 +16,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { CATEGORIES } from "@/lib/constants";
+import { cn } from "@/lib/utils";
 import type { CreateEntryInput, Entry } from "@/lib/types";
 import { displayTitle, isValidUrl, normalizeUrl } from "./entry-utils";
 
@@ -31,9 +31,14 @@ export function AddEntryForm({ onCreate }: AddEntryFormProps) {
   const [category, setCategory] = useState<string>(DEFAULT_CATEGORY);
   const [notes, setNotes] = useState("");
   const [isSaving, setIsSaving] = useState(false);
+  const [notesFocused, setNotesFocused] = useState(false);
 
   const normalized = normalizeUrl(url);
   const canSubmit = isValidUrl(normalized) && !isSaving;
+
+  // Purely visual: the notes lane stays out of the way until there is something
+  // to write about. The textarea is always mounted so focus is never stolen.
+  const expanded = url.trim() !== "" || notes !== "" || notesFocused;
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
@@ -60,10 +65,17 @@ export function AddEntryForm({ onCreate }: AddEntryFormProps) {
   }
 
   return (
-    <Card className="gap-0 p-3 sm:p-4">
-      <form onSubmit={handleSubmit} className="flex flex-col gap-3">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-          <div className="flex-1">
+    <form onSubmit={handleSubmit}>
+      <div
+        className={cn(
+          "bg-card border-border/70 rounded-xl border shadow-sm transition-all duration-150",
+          "focus-within:border-ring/50 focus-within:ring-ring/20 focus-within:ring-[3px]",
+        )}
+      >
+        {/* Command line: icon · url · category · save */}
+        <div className="flex flex-col gap-2 p-2 sm:flex-row sm:items-center sm:gap-2 sm:pl-3">
+          <div className="flex min-w-0 flex-1 items-center gap-2.5">
+            <LinkIcon className="text-muted-foreground/70 size-4 shrink-0" aria-hidden />
             <Label htmlFor="new-entry-url" className="sr-only">
               URL
             </Label>
@@ -76,16 +88,19 @@ export function AddEntryForm({ onCreate }: AddEntryFormProps) {
               value={url}
               onChange={(e) => setUrl(e.target.value)}
               placeholder="Paste a link to a paper, blog post, or thread…"
-              className="h-10 text-base sm:text-sm"
+              className="h-9 rounded-none border-0 bg-transparent px-0 text-base shadow-none focus-visible:border-transparent focus-visible:ring-0 sm:text-sm dark:bg-transparent"
             />
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex shrink-0 items-center gap-2">
             <Label htmlFor="new-entry-category" className="sr-only">
               Category
             </Label>
             <Select value={category} onValueChange={setCategory}>
-              <SelectTrigger id="new-entry-category" className="h-10 w-full sm:w-[190px]">
+              <SelectTrigger
+                id="new-entry-category"
+                className="text-muted-foreground hover:text-foreground data-[state=open]:text-foreground h-8 w-full border-transparent bg-transparent text-xs transition-colors hover:bg-transparent sm:w-[170px] dark:bg-transparent dark:hover:bg-transparent"
+              >
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -104,35 +119,53 @@ export function AddEntryForm({ onCreate }: AddEntryFormProps) {
               </SelectContent>
             </Select>
 
-            <Button type="submit" size="lg" disabled={!canSubmit} className="h-10 shrink-0 px-4">
-              {isSaving ? (
-                <Loader2Icon className="animate-spin" />
-              ) : (
-                <PlusIcon data-icon="inline-start" />
-              )}
+            <span aria-hidden className="bg-border/70 hidden h-5 w-px sm:block" />
+
+            <Button
+              type="submit"
+              size="sm"
+              disabled={!canSubmit}
+              className="h-8 shrink-0 px-3.5 text-xs transition-all duration-150"
+            >
+              {isSaving ? <Loader2Icon className="animate-spin" /> : null}
               Save
             </Button>
           </div>
         </div>
 
-        <Textarea
-          value={notes}
-          onChange={(e) => setNotes(e.target.value)}
-          onKeyDown={(e) => {
-            if ((e.metaKey || e.ctrlKey) && e.key === "Enter") handleSubmit(e);
-          }}
-          placeholder="Your own notes — why this caught your eye (optional)"
-          rows={2}
-          className="min-h-16 resize-y"
-        />
-
-        <p className="text-muted-foreground text-xs">
-          {category === DEFAULT_CATEGORY
-            ? "Leave the category on Auto and Claude will file it for you."
-            : `Filed under ${category}.`}{" "}
-          Title, summary, tags, and key claims are extracted in the background.
-        </p>
-      </form>
-    </Card>
+        {/* Secondary lane: notes + what happens next */}
+        <div
+          className={cn(
+            "grid transition-all duration-150",
+            expanded
+              ? "border-border/60 grid-rows-[1fr] border-t opacity-100"
+              : "grid-rows-[0fr] opacity-0",
+          )}
+        >
+          <div className="overflow-hidden">
+            <Textarea
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              onFocus={() => setNotesFocused(true)}
+              onBlur={() => setNotesFocused(false)}
+              onKeyDown={(e) => {
+                if ((e.metaKey || e.ctrlKey) && e.key === "Enter") handleSubmit(e);
+              }}
+              placeholder="Your own notes — why this caught your eye (optional)"
+              rows={2}
+              aria-label="Notes"
+              tabIndex={expanded ? undefined : -1}
+              className="min-h-14 resize-none rounded-none border-0 bg-transparent px-3.5 py-2.5 text-sm shadow-none focus-visible:border-transparent focus-visible:ring-0 dark:bg-transparent"
+            />
+            <p className="text-muted-foreground/80 border-border/50 border-t px-3.5 py-2 text-[11px] leading-4">
+              {category === DEFAULT_CATEGORY
+                ? "Category is on Auto — Claude will file it."
+                : `Filed under ${category}.`}{" "}
+              Title, summary, tags, and key claims are extracted in the background.
+            </p>
+          </div>
+        </div>
+      </div>
+    </form>
   );
 }

@@ -36,8 +36,8 @@ export function EntriesView() {
   );
 
   return (
-    <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 pb-24 sm:px-6">
-      <div className="sticky top-14 z-20 -mx-4 bg-background/80 px-4 pt-4 pb-3 backdrop-blur-sm sm:-mx-6 sm:px-6">
+    <div className="mx-auto flex w-full max-w-6xl flex-col gap-5 px-4 pb-24 sm:px-6">
+      <div className="bg-background/75 supports-[backdrop-filter]:bg-background/60 sticky top-13 z-20 -mx-4 px-4 pt-5 pb-3 backdrop-blur-md sm:-mx-6 sm:px-6">
         <AddEntryForm onCreate={createEntry} />
       </div>
 

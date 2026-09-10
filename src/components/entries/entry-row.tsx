@@ -25,6 +25,9 @@ type EntryRowProps = {
   onRetry: (id: string) => void;
 };
 
+/** Every body cell shares this rhythm so the columns stay on one grid. */
+const CELL = "px-4 py-2.5";
+
 function relativeTime(iso: string): string {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return "—";
@@ -49,34 +52,41 @@ export function EntryRow({ entry, onOpen, onRetry }: EntryRowProps) {
           onOpen(entry);
         }
       }}
-      className="cursor-pointer align-top outline-none focus-visible:bg-muted/60"
+      className="group border-border/60 hover:bg-muted/40 focus-visible:bg-muted/60 cursor-pointer align-top transition-colors outline-none"
     >
       {/* Title + source */}
-      <TableCell className="max-w-0 py-3">
+      <TableCell className={`${CELL} max-w-0`}>
         {ingesting ? (
           <div className="flex flex-col gap-1.5">
-            <Skeleton className="h-4 w-[min(22rem,80%)]" />
-            <div className="flex items-center gap-1.5">
-              <span className="relative flex size-1.5">
-                <span className="absolute inline-flex size-full animate-ping rounded-full bg-sky-500/70" />
-                <span className="relative inline-flex size-1.5 rounded-full bg-sky-500" />
-              </span>
-              <span className="text-muted-foreground animate-pulse text-xs">
-                {ingestLabel(entry.ingestStatus)}…
+            <Skeleton className="h-3.5 w-[min(22rem,80%)]" />
+            <div className="flex items-center gap-2">
+              <span
+                aria-hidden
+                className="bg-foreground/45 size-1.5 shrink-0 animate-pulse rounded-full"
+              />
+              <span className="text-muted-foreground font-mono text-[11px] tracking-tight">
+                {ingestLabel(entry.ingestStatus).toLowerCase()}…
               </span>
               <SourceLink url={entry.url} />
             </div>
           </div>
         ) : (
-          <div className="flex flex-col gap-0.5">
-            <span className="truncate text-sm leading-5 font-medium">{displayTitle(entry)}</span>
+          <div className="flex flex-col gap-1">
+            <span className="text-foreground/90 group-hover:text-foreground truncate text-sm leading-5 font-medium tracking-tight transition-colors">
+              {displayTitle(entry)}
+            </span>
             <div className="flex items-center gap-2">
               <SourceLink url={entry.url} />
               {errored ? (
                 <>
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <Badge variant="destructive">Ingest failed</Badge>
+                      <Badge
+                        variant="destructive"
+                        className="rounded-md px-1.5 text-[11px] font-medium"
+                      >
+                        Ingest failed
+                      </Badge>
                     </TooltipTrigger>
                     <TooltipContent className="max-w-xs">
                       {entry.ingestError || "The background ingest did not finish."}
@@ -85,6 +95,7 @@ export function EntryRow({ entry, onOpen, onRetry }: EntryRowProps) {
                   <Button
                     size="xs"
                     variant="ghost"
+                    className="text-muted-foreground hover:text-foreground -my-1 transition-colors"
                     onClick={(e) => {
                       e.stopPropagation();
                       onRetry(entry.id);
@@ -100,28 +111,38 @@ export function EntryRow({ entry, onOpen, onRetry }: EntryRowProps) {
         )}
       </TableCell>
 
-      {/* Category */}
-      <TableCell className="py-3">
-        <Badge variant="secondary" className="font-normal">
+      {/* Category — the one badge allowed to carry weight */}
+      <TableCell className={CELL}>
+        <Badge
+          variant="secondary"
+          className="rounded-md px-1.5 text-[11px] font-medium tracking-tight"
+        >
           {entry.category}
         </Badge>
       </TableCell>
 
-      {/* Tags */}
-      <TableCell className="hidden py-3 lg:table-cell">
+      {/* Tags — deliberately quieter than the category */}
+      <TableCell className={`${CELL} hidden lg:table-cell`}>
         {entry.tags.length === 0 ? (
-          <span className="text-muted-foreground/60 text-xs">—</span>
+          <span className="text-muted-foreground/50 text-xs">—</span>
         ) : (
           <div className="flex flex-wrap items-center gap-1">
             {visibleTags.map((tag) => (
-              <Badge key={tag} variant="outline" className="max-w-32 font-normal">
+              <Badge
+                key={tag}
+                variant="outline"
+                className="border-border/60 text-muted-foreground max-w-32 rounded-md px-1.5 text-[11px] font-normal"
+              >
                 <span className="truncate">{tag}</span>
               </Badge>
             ))}
             {extraTags > 0 ? (
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Badge variant="ghost" className="text-muted-foreground font-normal">
+                  <Badge
+                    variant="ghost"
+                    className="text-muted-foreground/70 rounded-md px-1 text-[11px] font-normal"
+                  >
                     +{extraTags}
                   </Badge>
                 </TooltipTrigger>
@@ -135,24 +156,26 @@ export function EntryRow({ entry, onOpen, onRetry }: EntryRowProps) {
       </TableCell>
 
       {/* Content type */}
-      <TableCell className="text-muted-foreground hidden py-3 text-xs capitalize md:table-cell">
+      <TableCell className={`${CELL} text-muted-foreground hidden text-xs capitalize md:table-cell`}>
         {entry.contentType || "—"}
       </TableCell>
 
       {/* Status */}
-      <TableCell className="hidden py-3 sm:table-cell">
+      <TableCell className={`${CELL} hidden sm:table-cell`}>
         <span className="text-muted-foreground text-xs whitespace-nowrap">
           {statusLabel(entry.status)}
         </span>
       </TableCell>
 
       {/* Rating */}
-      <TableCell className="py-3">
+      <TableCell className={CELL}>
         <Rating value={entry.rating} size="sm" />
       </TableCell>
 
       {/* Added */}
-      <TableCell className="text-muted-foreground py-3 text-xs whitespace-nowrap">
+      <TableCell
+        className={`${CELL} text-muted-foreground font-mono text-[11px] tracking-tight whitespace-nowrap tabular-nums`}
+      >
         {relativeTime(entry.createdAt)}
       </TableCell>
     </TableRow>
@@ -166,10 +189,10 @@ function SourceLink({ url }: { url: string }) {
       target="_blank"
       rel="noreferrer"
       onClick={(e) => e.stopPropagation()}
-      className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 text-xs transition-colors hover:underline"
+      className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 font-mono text-[11px] tracking-tight transition-colors hover:underline"
     >
       {domainOf(url)}
-      <ExternalLinkIcon className="size-3" />
+      <ExternalLinkIcon className="size-2.5 opacity-70" />
     </a>
   );
 }

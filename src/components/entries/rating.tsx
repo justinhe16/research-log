@@ -14,17 +14,19 @@ type RatingProps = {
 
 const MAX = 5;
 
+const FILLED = "fill-amber-500 text-amber-500 dark:fill-amber-400 dark:text-amber-400";
+
 export function Rating({ value, onChange, className, size = "md" }: RatingProps) {
   const readOnly = !onChange;
-  const starSize = size === "sm" ? "size-3.5" : "size-4.5";
+  const starSize = size === "sm" ? "size-3" : "size-4";
 
   if (readOnly && !value) {
-    return <span className="text-muted-foreground/60 text-xs">—</span>;
+    return <span className="text-muted-foreground/50 text-xs">—</span>;
   }
 
   return (
     <div
-      className={cn("flex items-center gap-0.5", className)}
+      className={cn("flex items-center", readOnly ? "gap-0.5" : "-ml-1", className)}
       role={readOnly ? "img" : "radiogroup"}
       aria-label={value ? `Rated ${value} of ${MAX}` : "Not rated"}
     >
@@ -35,10 +37,7 @@ export function Rating({ value, onChange, className, size = "md" }: RatingProps)
             <StarIcon
               key={star}
               aria-hidden
-              className={cn(
-                starSize,
-                filled ? "fill-amber-400 text-amber-400" : "text-muted-foreground/25",
-              )}
+              className={cn(starSize, filled ? FILLED : "text-muted-foreground/25")}
             />
           );
         }
@@ -52,15 +51,15 @@ export function Rating({ value, onChange, className, size = "md" }: RatingProps)
             title={value === star ? "Click again to clear" : `Rate ${star}/${MAX}`}
             onClick={() => onChange(value === star ? null : star)}
             className={cn(
-              "rounded-sm p-0.5 transition-transform outline-none",
-              "hover:scale-110 focus-visible:ring-3 focus-visible:ring-ring/50",
+              "hover:bg-muted focus-visible:ring-ring/50 rounded-md p-1 transition-colors outline-none",
+              "focus-visible:ring-3",
             )}
           >
             <StarIcon
               className={cn(
                 starSize,
                 "transition-colors",
-                filled ? "fill-amber-400 text-amber-400" : "text-muted-foreground/35",
+                filled ? FILLED : "text-muted-foreground/30",
               )}
             />
           </button>

@@ -18,6 +18,7 @@ export function ThemeToggle() {
       size="icon-sm"
       aria-label="Toggle light and dark theme"
       title="Toggle theme"
+      className="text-muted-foreground hover:text-foreground transition-colors duration-150"
       onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
     >
       <SunIcon className="dark:hidden" />

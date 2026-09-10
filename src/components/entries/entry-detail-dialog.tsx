@@ -58,6 +58,8 @@ type EntryDetailDialogProps = {
   onOpenRelated: (id: string) => void;
 };
 
+const FIELD_LABEL = "text-muted-foreground text-[11px] font-medium tracking-[0.04em] uppercase";
+
 export function EntryDetailDialog({
   entry,
   open,
@@ -151,46 +153,55 @@ function EntryDetailBody({
   const ingesting = isIngesting(entry);
   const errored = isIngestError(entry);
 
-  const meta: { label: string; value: string }[] = [];
-  if (entry.contentType) meta.push({ label: "Type", value: entry.contentType });
-  if (entry.authors?.length) meta.push({ label: "Authors", value: entry.authors.join(", ") });
-  if (entry.org) meta.push({ label: "Org", value: entry.org });
-  if (entry.venue) meta.push({ label: "Venue", value: entry.venue });
+  // One quiet line of provenance, not a definition list.
+  const meta: string[] = [];
+  if (entry.authors?.length) meta.push(entry.authors.join(", "));
+  if (entry.org) meta.push(entry.org);
+  if (entry.venue) meta.push(entry.venue);
   if (entry.publishedAt) {
     const date = new Date(entry.publishedAt);
-    meta.push({
-      label: "Published",
-      value: Number.isNaN(date.getTime()) ? entry.publishedAt : format(date, "d MMM yyyy"),
-    });
+    meta.push(Number.isNaN(date.getTime()) ? entry.publishedAt : format(date, "d MMM yyyy"));
   }
 
   return (
     <>
-      <DialogHeader className="gap-1.5 border-b p-5 pr-12">
-        <DialogTitle className="text-lg leading-6">
+      <DialogHeader className="border-border/60 gap-2 border-b px-6 py-5 pr-12">
+        <DialogTitle className="text-lg leading-snug font-medium">
           <a
             href={entry.url}
             target="_blank"
             rel="noreferrer"
-            className="decoration-muted-foreground/40 underline-offset-4 hover:underline"
+            className="decoration-muted-foreground/40 underline-offset-4 transition-colors hover:underline"
           >
             {displayTitle(entry)}
             <ExternalLinkIcon className="text-muted-foreground ml-1.5 inline size-3.5 align-baseline" />
           </a>
         </DialogTitle>
-        <DialogDescription className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
-          <span className="text-muted-foreground">{domainOf(entry.url)}</span>
+        <DialogDescription className="text-muted-foreground flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
+          <span className="font-mono tracking-tight">{domainOf(entry.url)}</span>
           {entry.contentType ? (
             <>
-              <span className="text-muted-foreground/40">·</span>
+              <Dot />
               <span className="capitalize">{entry.contentType}</span>
             </>
           ) : null}
+          {meta.map((item) => (
+            <span key={item} className="flex min-w-0 items-center gap-2">
+              <Dot />
+              <span className="truncate">{item}</span>
+            </span>
+          ))}
           {ingesting ? (
             <>
-              <span className="text-muted-foreground/40">·</span>
-              <span className="animate-pulse text-sky-600 dark:text-sky-400">
-                {ingestLabel(entry.ingestStatus)}…
+              <Dot />
+              <span className="text-foreground/70 flex items-center gap-1.5">
+                <span
+                  aria-hidden
+                  className="bg-foreground/45 size-1.5 animate-pulse rounded-full"
+                />
+                <span className="font-mono tracking-tight">
+                  {ingestLabel(entry.ingestStatus).toLowerCase()}…
+                </span>
               </span>
             </>
           ) : null}
@@ -198,13 +209,13 @@ function EntryDetailBody({
       </DialogHeader>
 
       <div className="min-h-0 flex-1 overflow-y-auto">
-        <div className="flex flex-col gap-6 p-5">
+        <div className="flex flex-col gap-7 px-6 py-6">
           {errored ? (
-            <div className="border-destructive/30 bg-destructive/5 text-destructive flex items-start gap-2.5 rounded-lg border p-3">
+            <div className="border-destructive/25 bg-destructive/5 text-destructive flex items-start gap-2.5 rounded-lg border p-3">
               <TriangleAlertIcon className="mt-0.5 size-4 shrink-0" />
               <div className="flex-1 text-xs leading-5">
                 <p className="font-medium">Ingest failed</p>
-                <p className="opacity-90">
+                <p className="font-mono text-[11px] leading-5 opacity-80">
                   {entry.ingestError || "The background ingest did not finish."}
                 </p>
               </div>
@@ -215,20 +226,9 @@ function EntryDetailBody({
             </div>
           ) : null}
 
-          {meta.length > 0 ? (
-            <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-xs">
-              {meta.map((item) => (
-                <div key={item.label} className="contents">
-                  <dt className="text-muted-foreground">{item.label}</dt>
-                  <dd>{item.value}</dd>
-                </div>
-              ))}
-            </dl>
-          ) : null}
-
           <Section title="Summary">
             {ingesting ? (
-              <div className="flex flex-col gap-2">
+              <div className="flex flex-col gap-2.5">
                 <Skeleton className="h-3.5 w-full" />
                 <Skeleton className="h-3.5 w-[92%]" />
                 <Skeleton className="h-3.5 w-[70%]" />
@@ -236,19 +236,19 @@ function EntryDetailBody({
             ) : summaryBlocks.length === 0 ? (
               <p className="text-muted-foreground text-sm">No summary yet.</p>
             ) : (
-              <div className="flex flex-col gap-3">
+              <div className="flex max-w-[68ch] flex-col gap-3.5">
                 {summaryBlocks.map((block, i) =>
                   block.kind === "list" ? (
-                    <ul key={i} className="flex list-none flex-col gap-1.5">
+                    <ul key={i} className="flex list-none flex-col gap-2">
                       {block.items.map((item, j) => (
-                        <li key={j} className="flex gap-2.5 text-sm leading-6">
-                          <span className="bg-muted-foreground/40 mt-2.5 size-1 shrink-0 rounded-full" />
+                        <li key={j} className="flex gap-3 text-[15px] leading-7">
+                          <span className="bg-muted-foreground/40 mt-3 size-1 shrink-0 rounded-full" />
                           <span>{item}</span>
                         </li>
                       ))}
                     </ul>
                   ) : (
-                    <p key={i} className="text-sm leading-6">
+                    <p key={i} className="text-[15px] leading-7">
                       {block.text}
                     </p>
                   ),
@@ -259,10 +259,10 @@ function EntryDetailBody({
 
           {entry.keyClaims?.length ? (
             <Section title="Key claims">
-              <ol className="flex flex-col gap-2">
+              <ol className="flex max-w-[68ch] flex-col gap-2.5">
                 {entry.keyClaims.map((claim, i) => (
-                  <li key={i} className="flex gap-2.5 text-sm leading-6">
-                    <span className="text-muted-foreground bg-muted mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full text-[11px] font-medium">
+                  <li key={i} className="flex gap-3 text-sm leading-6">
+                    <span className="text-muted-foreground bg-muted ring-border/50 mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-md font-mono text-[10px] font-medium ring-1 tabular-nums">
                       {i + 1}
                     </span>
                     <span>{claim}</span>
@@ -276,7 +276,11 @@ function EntryDetailBody({
             <Section title="Tags">
               <div className="flex flex-wrap gap-1.5">
                 {entry.tags.map((tag) => (
-                  <Badge key={tag} variant="outline" className="font-normal">
+                  <Badge
+                    key={tag}
+                    variant="outline"
+                    className="border-border/60 text-muted-foreground rounded-md px-1.5 text-[11px] font-normal"
+                  >
                     {tag}
                   </Badge>
                 ))}
@@ -284,14 +288,14 @@ function EntryDetailBody({
             </Section>
           ) : null}
 
-          <Separator />
+          <Separator className="bg-border/60" />
 
           {/* --- Editable fields --- */}
           <div className="grid gap-4 sm:grid-cols-3">
             <div className="flex flex-col gap-1.5">
-              <Label className="text-muted-foreground text-xs">Category</Label>
+              <Label className={FIELD_LABEL}>Category</Label>
               <Select value={entry.category} onValueChange={(v) => patchField({ category: v })}>
-                <SelectTrigger className="w-full">
+                <SelectTrigger className="w-full text-sm">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -305,9 +309,9 @@ function EntryDetailBody({
             </div>
 
             <div className="flex flex-col gap-1.5">
-              <Label className="text-muted-foreground text-xs">Status</Label>
+              <Label className={FIELD_LABEL}>Status</Label>
               <Select value={entry.status} onValueChange={(v) => patchField({ status: v })}>
-                <SelectTrigger className="w-full">
+                <SelectTrigger className="w-full text-sm">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -321,7 +325,7 @@ function EntryDetailBody({
             </div>
 
             <div className="flex flex-col gap-1.5">
-              <Label className="text-muted-foreground text-xs">Rating</Label>
+              <Label className={FIELD_LABEL}>Rating</Label>
               <div className="flex h-8 items-center">
                 <Rating value={entry.rating} onChange={(v) => patchField({ rating: v })} />
               </div>
@@ -330,7 +334,7 @@ function EntryDetailBody({
 
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="flex flex-col gap-1.5">
-              <Label htmlFor="detail-notes" className="text-muted-foreground text-xs">
+              <Label htmlFor="detail-notes" className={FIELD_LABEL}>
                 Notes
               </Label>
               <Textarea
@@ -340,11 +344,11 @@ function EntryDetailBody({
                 onBlur={saveText}
                 rows={4}
                 placeholder="What you took away from it…"
-                className="resize-y"
+                className="resize-y text-sm leading-6"
               />
             </div>
             <div className="flex flex-col gap-1.5">
-              <Label htmlFor="detail-why" className="text-muted-foreground text-xs">
+              <Label htmlFor="detail-why" className={FIELD_LABEL}>
                 Why I saved this
               </Label>
               <Textarea
@@ -354,19 +358,19 @@ function EntryDetailBody({
                 onBlur={saveText}
                 rows={4}
                 placeholder="The thread of thought that led you here…"
-                className="resize-y"
+                className="resize-y text-sm leading-6"
               />
             </div>
           </div>
 
-          <Separator />
+          <Separator className="bg-border/60" />
 
           <RelatedSection entryId={entry.id} onOpenRelated={onOpenRelated} />
         </div>
       </div>
 
       {/* --- Footer --- */}
-      <div className="bg-muted/40 flex items-center justify-between gap-2 border-t p-3">
+      <div className="bg-muted/30 border-border/60 flex items-center justify-between gap-2 border-t px-4 py-3">
         <div className="flex items-center gap-2">
           {confirmDelete ? (
             <>
@@ -394,18 +398,29 @@ function EntryDetailBody({
               </Button>
             </>
           ) : (
-            <Button size="sm" variant="ghost" onClick={() => setConfirmDelete(true)}>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="text-muted-foreground hover:text-destructive transition-colors"
+              onClick={() => setConfirmDelete(true)}
+            >
               <Trash2Icon data-icon="inline-start" />
               Delete
             </Button>
           )}
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2.5">
           {textDirty ? (
-            <span className="text-muted-foreground text-xs">Unsaved notes</span>
+            <span className="text-muted-foreground text-[11px]">Unsaved notes</span>
           ) : null}
-          <Button size="sm" variant="outline" disabled={!textDirty || isSavingText} onClick={saveText}>
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={!textDirty || isSavingText}
+            onClick={saveText}
+            className="transition-all duration-150"
+          >
             {isSavingText ? <Loader2Icon className="animate-spin" /> : null}
             Save notes
           </Button>
@@ -415,10 +430,20 @@ function EntryDetailBody({
   );
 }
 
+function Dot() {
+  return (
+    <span aria-hidden className="text-muted-foreground/40">
+      ·
+    </span>
+  );
+}
+
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section className="flex flex-col gap-2">
-      <h3 className="text-muted-foreground text-xs font-medium tracking-wide uppercase">{title}</h3>
+    <section className="flex flex-col gap-2.5">
+      <h3 className="text-muted-foreground text-[11px] font-medium tracking-[0.08em] uppercase">
+        {title}
+      </h3>
       {children}
     </section>
   );
@@ -459,29 +484,31 @@ function RelatedSection({
           <Skeleton className="h-9 w-full" />
         </div>
       ) : related.length === 0 ? (
-        <p className="text-muted-foreground text-sm">
+        <p className="text-muted-foreground max-w-[60ch] text-sm leading-6">
           Nothing similar in the log yet — related links appear once a few more entries are embedded.
         </p>
       ) : (
-        <ul className="flex flex-col gap-1">
+        <ul className="divide-border/50 border-border/50 divide-y overflow-hidden rounded-lg border">
           {related.map((item) => (
             <li key={item.id}>
               <button
                 type="button"
                 onClick={() => onOpenRelated(item.id)}
-                className="hover:bg-muted focus-visible:ring-ring/50 group flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-left transition-colors outline-none focus-visible:ring-3"
+                className="hover:bg-muted/50 focus-visible:ring-ring/50 group flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors outline-none focus-visible:ring-3 focus-visible:ring-inset"
               >
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm leading-5">{item.title || domainOf(item.url)}</p>
-                  <p className="text-muted-foreground truncate text-xs">
+                  <p className="text-foreground/90 group-hover:text-foreground truncate text-sm leading-5 font-medium tracking-tight transition-colors">
+                    {item.title || domainOf(item.url)}
+                  </p>
+                  <p className="text-muted-foreground truncate text-[11px] leading-4">
                     {item.category}
                     {item.tags?.length ? ` · ${item.tags.slice(0, 3).join(", ")}` : ""}
                   </p>
                 </div>
-                <span className="text-muted-foreground shrink-0 font-mono text-xs tabular-nums">
+                <span className="text-muted-foreground shrink-0 font-mono text-[11px] tracking-tight tabular-nums">
                   {formatScore(item.score)}
                 </span>
-                <ArrowUpRightIcon className="text-muted-foreground/50 group-hover:text-foreground size-3.5 shrink-0 transition-colors" />
+                <ArrowUpRightIcon className="text-muted-foreground/40 group-hover:text-foreground size-3.5 shrink-0 transition-colors" />
               </button>
             </li>
           ))}
