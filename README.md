@@ -105,6 +105,7 @@ npm run db:reembed
 | `npm run db:generate` | Generate a Drizzle migration after editing `schema.ts` |
 | `npm run db:backup` | Online snapshot to `./backups/`, pruned to 10 |
 | `npm run db:reembed` | Backfill embeddings for entries that have none |
+| `npm run db:scrub` | Strip stray markup from stored entries (local, no API calls) |
 
 ## Roadmap
 

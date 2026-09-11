@@ -12,7 +12,8 @@
     "db:backup": "tsx scripts/backup.ts",
     "db:reembed": "tsx scripts/reembed.ts",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "db:scrub": "tsx scripts/scrub-markup.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.125.0",

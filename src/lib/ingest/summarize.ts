@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
 import { CATEGORIES, CONTENT_TYPES, SUMMARY_MODEL } from "@/lib/constants";
+import { cleanMultiline, cleanText } from "@/lib/sanitize";
 import type { ExtractedContent } from "./extract";
 
 export type Extraction = {
@@ -88,13 +89,13 @@ const inputSchema = {
     summary: {
       type: "string",
       description:
-        "Either 2 short paragraphs OR 4-6 tight bullets (one per line, prefixed '- '). Information-dense. Start with the substance; never open with filler like 'This paper discusses' or 'The article explores'.",
+        "Either 2 short paragraphs OR 4-6 tight bullets (one per line, prefixed '- '). Information-dense. Start with the substance; never open with filler like 'This paper discusses' or 'The article explores'. Plain text only -- no HTML or XML tags.",
     },
     keyClaims: {
       type: "array",
       items: { type: "string" },
       description:
-        "3-5 atomic factual claims the piece actually makes. Each a single self-contained sentence, specific enough to be argued with (include numbers/results where given).",
+        "3-5 atomic factual claims the piece actually makes. Each a single self-contained sentence, specific enough to be argued with (include numbers/results where given). Plain prose only: each array element is a bare sentence with NO surrounding tags, no <item> wrappers, no markdown, no bullet prefixes.",
     },
     tags: {
       type: "array",
@@ -161,6 +162,8 @@ ${known}
 ${text}${truncated}
 </document>
 
+The <document> tags above are only a container for the source text. Do not imitate that markup: every value you record must be plain text, with no tags wrapping it.
+
 Record your analysis with the ${TOOL_NAME} tool.`;
 }
 
@@ -199,16 +202,25 @@ export async function summarize(content: ExtractedContent): Promise<Extraction> 
   }
 
   const data = parsed.data;
+
+  // Every model-authored string is scrubbed of markup before it is stored. The
+  // prompt wraps page content in <document> tags, and the model has been observed
+  // mimicking that by wrapping its own output (each claim in <item>...</item>).
   return {
     ...data,
+    title: cleanText(data.title) || data.title,
+    summary: cleanMultiline(data.summary),
     // Prefer metadata we scraped directly over anything the model inferred.
-    authors: content.authors.length ? content.authors : data.authors,
-    publishedAt: content.publishedAt ?? data.publishedAt,
-    venue: content.venue ?? data.venue,
-    org: content.org ?? data.org,
-    keyClaims: data.keyClaims.slice(0, MAX_KEY_CLAIMS),
-    tags: Array.from(new Set(data.tags.map((t) => t.toLowerCase().trim())))
-      .filter(Boolean)
-      .slice(0, MAX_TAGS),
+    authors: (content.authors.length ? content.authors : data.authors)
+      .map(cleanText)
+      .filter(Boolean),
+    publishedAt: content.publishedAt ?? nullableText(cleanText(data.publishedAt)),
+    venue: content.venue ?? nullableText(cleanText(data.venue)),
+    org: content.org ?? nullableText(cleanText(data.org)),
+    contentType: data.contentType,
+    keyClaims: data.keyClaims.map(cleanText).filter(Boolean).slice(0, MAX_KEY_CLAIMS),
+    tags: Array.from(
+      new Set(data.tags.map((t) => cleanText(t).toLowerCase()).filter(Boolean)),
+    ).slice(0, MAX_TAGS),
   };
 }

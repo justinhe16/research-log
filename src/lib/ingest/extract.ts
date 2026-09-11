@@ -222,7 +222,15 @@ async function extractHtml(u: URL, res: Response): Promise<ExtractedContent> {
   const siteName = metaOf(doc, ["og:site_name", "application-name"]);
   const metaTitle = metaOf(doc, ["og:title", "twitter:title"]);
   const docTitle = tidy(doc.title ?? "");
-  const bodyFallback = tidy(doc.body?.textContent ?? "");
+  // textContent includes the *contents* of script/style/template nodes, which would
+  // otherwise feed raw JS and CSS into the prompt. Readability drops them itself;
+  // the raw-body fallback has to do it explicitly. Cloned so the live document
+  // stays intact for the metadata lookups above.
+  const bodyClone = doc.body?.cloneNode(true) as HTMLElement | undefined;
+  bodyClone
+    ?.querySelectorAll("script, style, noscript, template, svg, iframe")
+    .forEach((node) => node.remove());
+  const bodyFallback = tidy(bodyClone?.textContent ?? "");
 
   let title = "";
   let text = "";
