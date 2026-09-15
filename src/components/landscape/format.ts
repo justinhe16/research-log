@@ -1,7 +1,7 @@
 import { formatDistanceToNowStrict } from "date-fns";
 
 import { ApiError } from "@/lib/landscape/api-client";
-import type { SearchKind, SearchStatus } from "@/lib/landscape/types";
+import type { PaperLite, SearchKind, SearchStatus } from "@/lib/landscape/types";
 
 export function relativeTime(iso: string | null | undefined): string | null {
   if (!iso) return null;
@@ -31,6 +31,17 @@ const compact = new Intl.NumberFormat("en", { notation: "compact", maximumFracti
 export function formatCount(value: number | null | undefined): string {
   if (value === null || value === undefined || !Number.isFinite(value)) return "—";
   return value >= 10_000 ? compact.format(value) : Math.round(value).toLocaleString("en");
+}
+
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+/** "Oct 2023", or the bare year, or an em dash. */
+export function shortDate(paper: Pick<PaperLite, "publishedAt" | "year">): string {
+  if (paper.publishedAt) {
+    const [y, m] = paper.publishedAt.split("-");
+    const mi = Number(m) - 1;
+    if (y && mi >= 0 && mi < 12) return `${MONTHS[mi]} ${y}`;
+  }
+  return paper.year ? String(paper.year) : "—";
 }
 
 export function formatPercent(value: number | null | undefined): string {

@@ -8,7 +8,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import type { ClusterDTO, PaperLite } from "@/lib/landscape/types";
 import { cn } from "@/lib/utils";
 import { clusterColor } from "../cluster-colors";
-import { formatCount } from "../format";
+import { formatCount, shortDate } from "../format";
 import { ClusterChip, ScoreBar } from "../metric";
 
 export type PaperSortKey = "rank" | "relevance" | "influence" | "date" | "citations";
@@ -193,15 +193,8 @@ export function authorLine(authors: string[]): string {
   return `${authors[0]}, ${authors[1]} +${authors.length - 2}`;
 }
 
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-export function shortDate(paper: Pick<PaperLite, "publishedAt" | "year">): string {
-  if (paper.publishedAt) {
-    const [y, m] = paper.publishedAt.split("-");
-    const mi = Number(m) - 1;
-    if (y && mi >= 0 && mi < 12) return `${MONTHS[mi]} ${y}`;
-  }
-  return paper.year ? String(paper.year) : "—";
-}
+/** Moved to ../format; re-exported for existing importers. */
+export { shortDate } from "../format";
 
 export function paperTime(paper: Pick<PaperLite, "publishedAt" | "year">): number {
   if (paper.publishedAt) {
