@@ -494,7 +494,7 @@ describe("synthesize stage", () => {
         } else if (kind === "narrative") {
           result.documents.narrative = { eras: [], gameChangers: [], frontier: { summary: "x", paperIds: [] }, outlook: "y", whatChanged: null };
         } else if (kind === "reading_path") {
-          result.documents.reading_path = { steps: [{ phase: "foundations", paperId: refMap.P2, reason: "start" }] };
+          result.documents.reading_path = { steps: [{ phase: "foundations", paperId: refMap.P2, reason: "Start with P2 (P1, C0)." }] };
         }
       }
       return result;
@@ -528,7 +528,10 @@ describe("synthesize stage", () => {
     expect(calls[1].dossier.text).toBe(calls[0].dossier.text);
     stored = docs();
     for (const d of stored.values()) expect(d.status).toBe("done");
-    expect(DOCUMENT_SCHEMAS.reading_path.parse(stored.get("reading_path")!.data).steps[0].paperId).toBe("p1");
+    const step = DOCUMENT_SCHEMAS.reading_path.parse(stored.get("reading_path")!.data).steps[0];
+    expect(step.paperId).toBe("p1");
+    // Prose refs are rewritten at write time: P2 = p1 (author A1, 2021), P1 = p0 (A0, 2020), C0 = S1's name.
+    expect(step.reason).toBe("Start with A1 2021 (A0 2020; Dictionary learning).");
     expect(counters).toMatchObject({ documentsDone: 5, documentsFailed: 0 });
 
     // Nothing left: no call.

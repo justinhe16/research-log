@@ -39,6 +39,14 @@ export type CreateEntryInput = {
   category?: string;
   notes?: string;
   whySaved?: string;
+  /** Known paper metadata; lets ingest fall back to the abstract when fetching fails. */
+  seed?: {
+    title?: string | null;
+    authors?: string[];
+    publishedAt?: string | null;
+    venue?: string | null;
+    abstract?: string | null;
+  };
 };
 
 export type UpdateEntryInput = Partial<

@@ -7,6 +7,7 @@ import type { ClusterChange, LandscapeSnapshot } from "@/lib/landscape/types";
 import { cn } from "@/lib/utils";
 import { clusterColor, colorSlotVar } from "../cluster-colors";
 import { formatCount, relativeTime } from "../format";
+import { useNow } from "../use-now";
 import { CARD_CLASS, PaperChip, PaperChips, resolvePapers, type PaperLookup } from "./primitives";
 
 // ---------------------------------------------------------------------------
@@ -17,7 +18,8 @@ export function SummaryHero({ snapshot }: { snapshot: LandscapeSnapshot }) {
   const { papers, clusters, documents, topic, search } = snapshot;
   const years = papers.map((p) => p.year).filter((y): y is number => y !== null);
   const span = years.length ? (Math.min(...years) === Math.max(...years) ? `${years[0]}` : `${Math.min(...years)}–${Math.max(...years)}`) : "—";
-  const last = relativeTime(search.finishedAt ?? search.createdAt);
+  const now = useNow();
+  const last = relativeTime(search.finishedAt ?? search.createdAt, now);
   const logged = papers.filter((p) => p.loggedEntryId).length;
   const synthSummary = documents.clusters?.topicSummary?.trim() || null;
   // The header already shows the topic summary; only repeat it here when this search says something different.

@@ -8,11 +8,13 @@ import { cn } from "@/lib/utils";
 import { withFixture, type FixtureMode } from "./fixture-mode";
 import { relativeTime } from "./format";
 import { ProgressRing } from "./progress-ring";
+import { useNow } from "./use-now";
 
 export function TopicCard({ topic, fixture = null }: { topic: TopicCardData; fixture?: FixtureMode | null }) {
   const active = topic.activeSearch;
   const blurb = topic.summary || topic.description;
-  const last = relativeTime(topic.lastSearchAt);
+  const now = useNow();
+  const last = relativeTime(topic.lastSearchAt, now);
   const lastStatus = topic.lastSearch?.status;
 
   return (

@@ -57,6 +57,7 @@ You are given a dossier: every paper in this landscape as a card with a ref (P1,
 
 Ground rules:
 - The dossier is your only evidence. Cite papers only by refs that appear in it, exactly as written ("P12"). Never invent papers, refs, authors, numbers, benchmarks or dates.
+- Refs ("P12") and cluster ids ("C0") are internal handles the reader never sees. They belong only in the ref, refs and idx fields. Prose fields (summaries, descriptions, stances, evidence, reasons, outlook, whatChanged) must never contain them: name a paper by its method or short title or by first author and year (e.g. "the k-sparse autoencoder paper", "Gao et al. 2024"), and a cluster by its name. Write "InterPLM and the diffusion SAE work", not "P8 and P14" or "(P8, P14)".
 - When you state a number (citations, velocity, a result), it must appear on the cited card.
 - Be dense and specific: name the methods, models and benchmarks. No filler, no hedging, no "this landscape explores".
 - Prefer claims the dossier shows across several papers over claims resting on one card.

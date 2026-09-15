@@ -28,9 +28,12 @@ import { cn } from "@/lib/utils";
 import { withFixture, type FixtureMode } from "./fixture-mode";
 import { formatMinutesRange, formatUsd, relativeTime } from "./format";
 import { SearchHistoryMenu } from "./search-history-menu";
+import { useNow } from "./use-now";
 
 type TopicHeaderProps = {
   topic: TopicDetail;
+  /** Summary to show: the selected search's own when viewing an older one. Defaults to the topic's. */
+  summary?: string | null;
   selectedSearchId: string | null;
   onSelectSearch: (searchId: string) => void;
   onStartSearch: (input: StartSearchInput) => void;
@@ -45,6 +48,7 @@ type TopicHeaderProps = {
 
 export function TopicHeader({
   topic,
+  summary: summaryProp,
   selectedSearchId,
   onSelectSearch,
   onStartSearch,
@@ -57,7 +61,7 @@ export function TopicHeader({
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [expanded, setExpanded] = useState(false);
-  const [now] = useState(() => Date.now());
+  const now = useNow();
   const latestDone = topic.lastSearch;
   const selected = topic.searches.find((s) => s.id === selectedSearchId) ?? null;
   const viewingOlder = selected !== null && latestDone !== null && selected.id !== latestDone.id;
@@ -69,8 +73,8 @@ export function TopicHeader({
   const refreshEstimate = hasDone
     ? estimate(latestDone.depth, { hasS2Key: hasS2Key ?? true, refresh: { daysSince: daysSince ?? 0 } })
     : null;
-  const summary = topic.summary;
-  const when = relativeTime(latestDone?.finishedAt ?? topic.lastSearchAt);
+  const summary = summaryProp === undefined ? topic.summary : summaryProp;
+  const when = relativeTime(latestDone?.finishedAt ?? topic.lastSearchAt, now);
 
   return (
     <header className="flex flex-col gap-3">
@@ -130,7 +134,7 @@ export function TopicHeader({
                     <DropdownMenuItem onSelect={() => onStartSearch({ mode: "refresh" })} className="flex-col items-start gap-0">
                       <span className="text-xs font-medium">Refresh</span>
                       <span className="text-muted-foreground text-[11px]">
-                        New papers since {relativeTime(latestDone.startedAt ?? latestDone.createdAt)} ·{" "}
+                        New papers since {relativeTime(latestDone.startedAt ?? latestDone.createdAt, now)} ·{" "}
                         ~{formatUsd(refreshEstimate.costUsd.expected)}
                       </span>
                     </DropdownMenuItem>
@@ -224,7 +228,7 @@ export function TopicHeader({
             <Sep />
             <span className="tabular">{selected.paperCount} papers</span>
             <Sep />
-            <span>{viewingOlder ? `Search from ${relativeTime(selected.finishedAt ?? selected.createdAt)}` : `Last search ${when ?? "—"}`}</span>
+            <span>{viewingOlder ? `Search from ${relativeTime(selected.finishedAt ?? selected.createdAt, now)}` : `Last search ${when ?? "—"}`}</span>
             <Sep />
             <span className="font-mono tracking-tight tabular-nums">{formatUsd(selected.costUsd)}</span>
           </>

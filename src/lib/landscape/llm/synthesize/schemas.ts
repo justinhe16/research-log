@@ -283,6 +283,8 @@ export const DOCUMENT_SCHEMAS = {
 type JsonSchema = Record<string, unknown>;
 
 const S = (description: string): JsonSchema => ({ type: "string", description });
+/** Prose field: refs and cluster ids stay out of the text. */
+const P = (description: string): JsonSchema => S(`${description} Name papers by method, short title or first author and year, and clusters by name; never write refs like "P12" or "C0" here.`);
 const refsSchema = (description: string): JsonSchema => ({
   type: "array",
   items: { type: "string", pattern: "^P\\d+$" },
@@ -298,14 +300,14 @@ const tensionItemSchema: JsonSchema = {
   type: "object",
   properties: {
     title: S("Short name of the disagreement, e.g. 'Scale vs. data quality'."),
-    description: S("1-3 sentences: what is contested and why it matters."),
+    description: P("1-3 sentences: what is contested and why it matters."),
     positions: {
       type: "array",
       description: "2-3 opposing positions.",
       items: {
         type: "object",
         properties: {
-          stance: S("One sentence stating the position."),
+          stance: P("One sentence stating the position."),
           refs: refsSchema("Papers that hold or evidence this position."),
         },
         required: ["stance", "refs"],
@@ -320,8 +322,8 @@ const gapItemSchema: JsonSchema = {
   type: "object",
   properties: {
     title: S("Short name of the open problem."),
-    description: S("1-3 sentences describing what is missing."),
-    evidence: S("Why this is a gap, grounded in the dossier (e.g. no paper evaluates X; all Y results are on Z)."),
+    description: P("1-3 sentences describing what is missing."),
+    evidence: P("Why this is a gap, grounded in the dossier (e.g. no paper evaluates X; all Y results are on Z)."),
     evidenceRefs: refsSchema("Papers that make the gap visible."),
     directions: stringsSchema("1-3 concrete research directions."),
   },
@@ -338,7 +340,7 @@ const narrativeProperties: JsonSchema = {
         label: S("Short era name, e.g. 'Dictionary learning on toy models'."),
         startYear: { type: "integer" },
         endYear: { type: ["integer", "null"], description: "null if the era is ongoing." },
-        summary: S("2-3 sentences: the ideas this era rested on and what displaced them."),
+        summary: P("2-3 sentences: the ideas this era rested on and what displaced them."),
         keyRefs: refsSchema("The papers the era was built on."),
       },
       required: ["label", "startYear", "endYear", "summary", "keyRefs"],
@@ -351,8 +353,8 @@ const narrativeProperties: JsonSchema = {
       type: "object",
       properties: {
         ref: { type: "string", pattern: "^P\\d+$", description: "Dossier ref." },
-        why: S("One or two sentences on what it changed."),
-        evidence: S("Grounding in the dossier metrics shown on the card: citations, velocity, influential citations, pagerank (only if shown), builds_on in-degree."),
+        why: P("One or two sentences on what it changed."),
+        evidence: P("Grounding in the dossier metrics shown on the card: citations, velocity, influential citations, pagerank (only if shown), builds_on in-degree."),
       },
       required: ["ref", "why", "evidence"],
     },
@@ -360,15 +362,15 @@ const narrativeProperties: JsonSchema = {
   frontier: {
     type: "object",
     properties: {
-      summary: S("2-4 sentences on where the active frontier is now."),
+      summary: P("2-4 sentences on where the active frontier is now."),
       refs: refsSchema("The papers defining the frontier."),
     },
     required: ["summary", "refs"],
   },
-  outlook: S("2-3 sentences on where the field is likely heading."),
+  outlook: P("2-3 sentences on where the field is likely heading."),
   whatChanged: {
     type: ["string", "null"],
-    description: "Only when a diff is provided: 2-4 sentences on what changed since the previous search. Otherwise null.",
+    description: "Only when a diff is provided: 2-4 sentences on what changed since the previous search, naming papers and clusters (never refs like \"P12\" or \"C0\"). Otherwise null.",
   },
 };
 
@@ -377,7 +379,7 @@ const readingStepSchema: JsonSchema = {
   properties: {
     phase: { type: "string", enum: [...READING_PHASES] },
     ref: { type: "string", pattern: "^P\\d+$", description: "Dossier ref." },
-    reason: S("One sentence: why read this, and what to get out of it."),
+    reason: P("One sentence: why read this, and what to get out of it."),
   },
   required: ["phase", "ref", "reason"],
 };
@@ -396,7 +398,7 @@ export const CLUSTERS_TOOL = tool(
   "record_clusters",
   "Record the topic summary and a name, summary, key ideas and representative papers for every cluster.",
   {
-    topicSummary: S("3-5 sentence overview of the whole landscape. Plain text."),
+    topicSummary: P("3-5 sentence overview of the whole landscape. Plain text."),
     clusters: {
       type: "array",
       description: "Exactly one entry per cluster in the dossier.",
@@ -405,7 +407,7 @@ export const CLUSTERS_TOOL = tool(
         properties: {
           idx: { type: "integer", description: "The cluster idx from the dossier." },
           name: S("2-5 word cluster name."),
-          summary: S("2-3 sentences on what unites this cluster."),
+          summary: P("2-3 sentences on what unites this cluster."),
           keyIdeas: stringsSchema("3-5 key ideas."),
           representativeRefs: refsSchema("2-4 most representative papers in this cluster."),
         },

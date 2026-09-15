@@ -2,7 +2,7 @@ import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { entries } from "@/lib/db/schema";
 import { embed, toBuffer } from "@/lib/embedding";
-import { extractContent } from "./extract";
+import { contentFromSeed, extractContent, type ExtractedContent, type SeedMetadata } from "./extract";
 import { summarize } from "./summarize";
 
 const MAX_RAW_TEXT_CHARS = 40_000;
@@ -28,23 +28,42 @@ function messageOf(err: unknown): string {
   }
 }
 
+export type IngestOptions = {
+  /**
+   * Metadata the caller already has (Landscape's "Log this paper"). When fetching
+   * the URL fails and the seed has an abstract, the entry is summarized from the
+   * seeded title + abstract instead of failing; seeded authors/venue/date win
+   * over the model's guesses.
+   */
+  seed?: SeedMetadata | null;
+};
+
 /**
  * Fetch -> summarize -> embed a saved entry, writing progress to the row as it
  * goes so the UI can show a live status. Runs detached from the request that
  * created the entry, so it never throws: failures land in `ingestError`.
  */
-export async function runIngest(entryId: string): Promise<void> {
+export async function runIngest(entryId: string, { seed }: IngestOptions = {}): Promise<void> {
   try {
     const row = db.select().from(entries).where(eq(entries.id, entryId)).get();
     if (!row) throw new Error(`Entry ${entryId} no longer exists.`);
 
     // --- fetch -------------------------------------------------------------
     setStatus(entryId, "fetching");
-    const content = await extractContent(row.url);
+    let content: ExtractedContent;
+    try {
+      content = await extractContent(row.url);
+    } catch (err) {
+      const seeded = contentFromSeed(row.url, seed);
+      if (!seeded) throw err;
+      console.warn(`[ingest] entry ${entryId}: fetch failed, summarizing from seeded abstract: ${messageOf(err)}`);
+      content = seeded;
+    }
 
     // --- summarize ---------------------------------------------------------
     setStatus(entryId, "summarizing");
     const analysis = await summarize(content);
+    const seedAuthors = (seed?.authors ?? []).map((a) => a.trim()).filter(Boolean);
 
     // The user's own choices win over the model's guesses.
     const userPickedCategory = row.category && row.category !== "Other";
@@ -63,11 +82,11 @@ export async function runIngest(entryId: string): Promise<void> {
         summary: analysis.summary,
         keyClaims: analysis.keyClaims,
         tags: analysis.tags,
-        authors: analysis.authors,
+        authors: seedAuthors.length ? seedAuthors : analysis.authors,
         org: analysis.org,
-        venue: analysis.venue,
-        publishedAt: analysis.publishedAt,
-        contentType: analysis.contentType,
+        venue: seed?.venue?.trim() || analysis.venue,
+        publishedAt: seed?.publishedAt?.trim() || analysis.publishedAt,
+        contentType: seed ? "paper" : analysis.contentType,
         category,
         embedding: toBuffer(vector),
         rawText: content.text.slice(0, MAX_RAW_TEXT_CHARS),

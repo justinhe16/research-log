@@ -23,6 +23,8 @@ import { DOCUMENT_SCHEMAS, type DiffDocument } from "@/lib/landscape/llm/synthes
 import { computeDiffWithMatch, type DiffSide } from "@/lib/landscape/pipeline/diff";
 import type { DocumentKind, StageContext } from "@/lib/landscape/types";
 import { refreshTopicDenormalized } from "@/lib/landscape/queries/topic-repo";
+import { loadProseRefContext } from "@/lib/landscape/queries/snapshot";
+import { rewriteDocumentProse } from "@/lib/landscape/documents/prose-refs";
 import { loadMatchableClusters } from "./cluster";
 import { assignRefs, errorMessage, getSearchRow, loadPool, resolveDb, warn, type StructureDeps } from "./shared";
 
@@ -212,15 +214,17 @@ export function reuseBaseDocuments(
       .map((r) => [r.kind, r]),
   );
   const copies: { kind: SynthesizedKind; data: unknown; model: string | null }[] = [];
+  // Prose refs in the base documents are the base search's ranks; resolve them there.
+  const baseProseRefs = loadProseRefContext(db, ctx.baseSearchId);
   for (const kind of pending) {
     const row = baseDocs.get(kind);
     if (row?.status !== "done") return 0;
     const parsed = DOCUMENT_SCHEMAS[kind].safeParse(row.data);
     if (!parsed.success) return 0;
-    let data: unknown = parsed.data;
+    let data: unknown = rewriteDocumentProse(kind, parsed.data as never, baseProseRefs);
     if (kind === "narrative") {
       const rising = d.rising.length ? ` ${d.rising.length} paper(s) gained notable citations.` : "";
-      data = { ...(parsed.data as Record<string, unknown>), whatChanged: `${UNCHANGED_WHAT_CHANGED}${rising}` };
+      data = { ...(data as Record<string, unknown>), whatChanged: `${UNCHANGED_WHAT_CHANGED}${rising}` };
     }
     copies.push({ kind, data, model: row.model });
   }
@@ -274,11 +278,15 @@ async function runPending(
   });
   ctx.throwIfCancelled();
 
+  // Safety net: the prompts keep refs out of prose, but "P12"/"C0" must never reach the reader.
+  const proseRefs = loadProseRefContext(db, ctx.searchId, { refMap: dossier.refMap, clusterLabels: result.clusterLabels });
+
   for (const kind of pending) {
     const doc = result.documents[kind];
     if (doc) {
       try {
-        upsertDocument(db, ctx.searchId, kind, { status: "done", data: doc, model: SYNTHESIS_MODEL }, deps.now());
+        const data = rewriteDocumentProse(kind, doc, proseRefs);
+        upsertDocument(db, ctx.searchId, kind, { status: "done", data, model: SYNTHESIS_MODEL }, deps.now());
         continue;
       } catch (err) {
         fail(kind, `invalid document: ${errorMessage(err)}`);

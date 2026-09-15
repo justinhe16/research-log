@@ -4,6 +4,7 @@ import { searchDocuments, searches, topics, type TopicRow } from "@/lib/db/schem
 import { toBuffer } from "@/lib/embedding";
 import { uniqueSlug } from "../slug";
 import { topicEmbeddingText, type EmbedFn } from "../topic-dedupe";
+import { topicCardSummary } from "./snapshot";
 import { isoKey, summaryColumns, toDepth, toSearchSummary } from "./searches";
 import {
   ACTIVE_SEARCH_STATUSES,
@@ -17,14 +18,14 @@ import {
 // Mapping
 // ---------------------------------------------------------------------------
 
-function toCard(t: TopicRow, lastSearch: SearchSummary | null, activeSearch: SearchSummary | null): TopicCard {
+function toCard(t: TopicRow, lastSearch: SearchSummary | null, activeSearch: SearchSummary | null, summary = t.summary): TopicCard {
   return {
     id: t.id,
     slug: t.slug,
     name: t.name,
     description: t.description,
     defaultDepth: toDepth(t.defaultDepth),
-    summary: t.summary,
+    summary,
     paperCount: t.paperCount,
     lastSearchAt: t.lastSearchAt,
     lastSearch,
@@ -69,7 +70,8 @@ function cardsFor(db: Db, rows: TopicRow[]): TopicCard[] {
     db,
     rows.map((r) => r.id),
   );
-  return rows.map((t) => toCard(t, last.get(t.id) ?? null, active.get(t.id) ?? null));
+  // Summaries stored before refs were kept out of prose may still say "P12"/"C0".
+  return rows.map((t) => toCard(t, last.get(t.id) ?? null, active.get(t.id) ?? null, topicCardSummary(db, t)));
 }
 
 // ---------------------------------------------------------------------------

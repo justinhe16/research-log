@@ -12,6 +12,7 @@ import {
   type PaperExtractionRow,
 } from "@/lib/db/schema";
 import { CLUSTER_COLORS, EXTRACTION_VERSION } from "../constants";
+import { buildProseRefContext, rewriteLandscapeDocumentsProse, rewriteProseRefs, type ProseRefContext } from "../documents/prose-refs";
 import { DOCUMENT_SCHEMAS } from "../llm/synthesize/schemas";
 import { loggedEntryIdFor, loggedIndex } from "../papers/logged";
 import {
@@ -157,6 +158,57 @@ export function loadDocuments(db: Db, searchId: string): { documents: LandscapeD
   return { documents, failed: DOCUMENT_KINDS.filter((k) => failed.has(k)) };
 }
 
+/**
+ * Citation labels for the refs ("P12", "C0") a search's synthesis prose may contain.
+ * Refs are P{final_rank} (as the synthesize stage assigns them) unless `refMap`
+ * (the dossier's own ref -> paperId map) is given. Cluster names: the clusters
+ * document, else the stored label; `clusterLabels` overrides both.
+ */
+export function loadProseRefContext(
+  db: Db,
+  searchId: string,
+  opts: { refMap?: Readonly<Record<string, string>>; clusterLabels?: Readonly<Record<number, string>> } = {},
+): ProseRefContext {
+  const rows = db
+    .select({ paperId: searchPapers.paperId, finalRank: searchPapers.finalRank, p: papers })
+    .from(searchPapers)
+    .innerJoin(papers, eq(papers.id, searchPapers.paperId))
+    .where(and(eq(searchPapers.searchId, searchId), eq(searchPapers.selected, true)))
+    .orderBy(sql`coalesce(${searchPapers.finalRank}, 1e9)`, asc(papers.title), asc(papers.id))
+    .all();
+  const refOf = opts.refMap ? new Map(Object.entries(opts.refMap).map(([ref, id]) => [id, ref])) : null;
+  const citable = rows.map((r, i) => ({
+    ref: refOf ? (refOf.get(r.paperId) ?? "") : refFor(r.finalRank ?? i + 1),
+    title: r.p.title,
+    authors: r.p.authors ?? [],
+    year: r.p.year,
+    publishedAt: r.p.publishedAt,
+  }));
+
+  const labels = new Map<number, string>();
+  for (const c of db.select({ idx: searchClusters.idx, label: searchClusters.label }).from(searchClusters).where(eq(searchClusters.searchId, searchId)).all()) {
+    if (c.label?.trim()) labels.set(c.idx, c.label);
+  }
+  const doc = db
+    .select({ data: searchDocuments.data })
+    .from(searchDocuments)
+    .where(and(eq(searchDocuments.searchId, searchId), eq(searchDocuments.kind, "clusters"), eq(searchDocuments.status, "done")))
+    .get();
+  const parsed = doc ? DOCUMENT_SCHEMAS.clusters.safeParse(doc.data) : null;
+  if (parsed?.success) for (const c of parsed.data.clusters) if (c.name.trim()) labels.set(c.idx, c.name);
+  for (const [idx, label] of Object.entries(opts.clusterLabels ?? {})) if (label?.trim()) labels.set(Number(idx), label);
+
+  return buildProseRefContext({ papers: citable, clusters: [...labels].map(([idx, label]) => ({ idx, label })) });
+}
+
+/** The topic card's stored summary (from its latest search), refs rewritten against that search. */
+export function topicCardSummary(db: Db, topic: { summary: string | null; lastSearchId: string | null }): string | null {
+  const summary = topic.summary?.trim();
+  if (!summary) return null;
+  if (!topic.lastSearchId || !/\b(?:[Pp]|C|[Cc]luster-)\d+\b/.test(summary)) return summary;
+  return rewriteProseRefs(summary, loadProseRefContext(db, topic.lastSearchId)) || null;
+}
+
 // ---------------------------------------------------------------------------
 // Snapshot
 // ---------------------------------------------------------------------------
@@ -169,7 +221,7 @@ export function getLandscapeSnapshot(db: Db, searchId: string): LandscapeSnapsho
   const summary = getSearchSummary(db, searchId);
   if (!summary) return null;
 
-  const { documents, failed } = loadDocuments(db, searchId);
+  const { documents: storedDocuments, failed } = loadDocuments(db, searchId);
 
   // --- papers -------------------------------------------------------------
   const rows = db
@@ -187,8 +239,8 @@ export function getLandscapeSnapshot(db: Db, searchId: string): LandscapeSnapsho
     rows.filter((r) => !r.linked).map((r) => r.p.id),
   );
   const logged = loggedIndex(db);
-  const narrativeGameChangers = documents.narrative
-    ? new Set(documents.narrative.gameChangers.map((g) => g.paperId))
+  const narrativeGameChangers = storedDocuments.narrative
+    ? new Set(storedDocuments.narrative.gameChangers.map((g) => g.paperId))
     : null;
 
   const paperList: PaperLite[] = rows.map(({ sp, p, linked }, i) => {
@@ -227,7 +279,7 @@ export function getLandscapeSnapshot(db: Db, searchId: string): LandscapeSnapsho
   });
 
   // --- clusters -----------------------------------------------------------
-  const docClusters = new Map((documents.clusters?.clusters ?? []).map((c) => [c.idx, c]));
+  const docClusters = new Map((storedDocuments.clusters?.clusters ?? []).map((c) => [c.idx, c]));
   const clusterRows = db
     .select()
     .from(searchClusters)
@@ -251,6 +303,15 @@ export function getLandscapeSnapshot(db: Db, searchId: string): LandscapeSnapsho
     };
   });
 
+  // --- prose refs -----------------------------------------------------------
+  // Documents synthesized before refs were kept out of prose still say "P12"/"C0".
+  const proseRefs = buildProseRefContext({
+    papers: paperList.map((p) => ({ ref: p.ref, title: p.title, authors: p.authors, year: p.year, publishedAt: p.publishedAt })),
+    clusters: clusters.map((c) => ({ idx: c.idx, label: c.label })),
+  });
+  const documents = rewriteLandscapeDocumentsProse(storedDocuments, proseRefs);
+  const searchTopicSummary = documents.clusters?.topicSummary?.trim();
+
   // --- edges among selected papers ---------------------------------------
   const selectedIds = new Set(paperList.map((p) => p.id));
   const edges: EdgeDTO[] = db
@@ -272,7 +333,7 @@ export function getLandscapeSnapshot(db: Db, searchId: string): LandscapeSnapsho
       name: topic.name,
       description: topic.description,
       // This search's own synthesis beats the card field (which tracks the latest search).
-      summary: documents.clusters?.topicSummary?.trim() || topic.summary || null,
+      summary: searchTopicSummary || topicCardSummary(db, topic),
     },
     search: {
       ...summary,

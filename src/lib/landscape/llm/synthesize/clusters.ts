@@ -8,7 +8,7 @@ const MAX_REPRESENTATIVES = 4;
 
 export const CLUSTERS_INSTRUCTION = `Task: name and characterize every cluster in the dossier, and summarize the whole landscape.
 
-- topicSummary: 3-5 sentences a researcher new to the field could orient by: what the field is trying to do, the main families of approach (by cluster), and where the energy is now.
+- topicSummary: 3-5 sentences a researcher new to the field could orient by: what the field is trying to do, the main families of approach (by the cluster names you choose, never "C0"), and where the energy is now. No paper refs in it: name papers by method or first author and year.
 - One entry per cluster, echoing its idx. The heuristic label and key terms are hints, not names: choose a 2-5 word name that says what unites the papers (method family or problem), specific enough to tell clusters apart.
 - summary: 2-3 sentences on the shared idea and how the cluster's papers differ from the neighbouring clusters.
 - keyIdeas: 3-5 concrete ideas, techniques or findings, each a short phrase grounded in the member cards.

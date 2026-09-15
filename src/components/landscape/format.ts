@@ -1,13 +1,14 @@
-import { formatDistanceToNowStrict } from "date-fns";
+import { formatDistanceStrict } from "date-fns";
 
 import { ApiError } from "@/lib/landscape/api-client";
 import type { PaperLite, SearchKind, SearchStatus } from "@/lib/landscape/types";
 
-export function relativeTime(iso: string | null | undefined): string | null {
+/** "3 minutes ago" relative to `now` (pass `useNow()` so it ticks). Never reads as in the future. */
+export function relativeTime(iso: string | null | undefined, now: number = Date.now()): string | null {
   if (!iso) return null;
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return null;
-  return formatDistanceToNowStrict(date, { addSuffix: true });
+  return formatDistanceStrict(date, Math.max(now, date.getTime()), { addSuffix: true });
 }
 
 export function formatUsd(value: number | null | undefined): string {

@@ -103,7 +103,20 @@ function PaperSheetBody({
     try {
       const entryId = fixture
         ? `fixture-entry-${paper.id}`
-        : (await api.createEntry({ url: logUrl, whySaved: `Found in the ${topicName} landscape.` })).id;
+        : (
+            await api.createEntry({
+              url: logUrl,
+              whySaved: `Found in the ${topicName} landscape.`,
+              // Lets the Log fill in (and summarize from the abstract) even if fetching the URL fails.
+              seed: {
+                title: paper.title.slice(0, 500),
+                authors: paper.authors.slice(0, 100).map((a) => a.slice(0, 200)),
+                publishedAt: paper.publishedAt ?? (paper.year ? String(paper.year) : null),
+                venue: paper.venue?.slice(0, 300) ?? null,
+                abstract: detail?.abstract?.slice(0, 20_000) ?? null,
+              },
+            })
+          ).id;
       onLogged(paper.id, entryId);
       toast.success("Logged — reading it now", { description: paper.title });
     } catch (err) {

@@ -12,14 +12,14 @@ import { clean, describeDiff, runSynthesisCall, type SynthesisCallOptions, type 
 const MAX_ERAS = 5;
 
 export const NARRATIVE_GUIDE = `Narrative:
-- eras (2-5, oldest first): how the field's foundations shifted over time. Each era's summary names what the work then was built on and what displaced it, in the style "Sparse coding, toy superposition models and linear probes were the basis in 2022; by 2024 the field moved to SAEs trained on production LLMs." Use the card dates for startYear/endYear (endYear null for the current era). keyRefs: the papers the era rested on.
+- eras (2-5, oldest first): how the field's foundations shifted over time. Each era's summary names what the work then was built on and what displaced it, in the style "Sparse coding, toy superposition models and linear probes were the basis in 2022; by 2024 the field moved to SAEs trained on production LLMs." Use the card dates for startYear/endYear (endYear null for the current era). keyRefs: the papers the era rested on (refs go here, not in the summary).
 - gameChangers (up to ${MAX_GAME_CHANGERS}): papers that shifted the field. Start from the listed candidates; include a non-candidate only if its builds-on in-degree or velocity clearly justifies it. why: what it changed. evidence: cite its actual metrics from the card (citations, influential citations, velocity, pagerank when the card shows it, built-on-by) and what builds on it. Never cite a metric the card does not show. Do not pick a paper just because it is old.
-- frontier: an object with summary (2-4 sentences on the most recent, fastest-moving work; judge recent papers by velocity, not raw citations) and refs (the refs defining it).
+- frontier: an object with summary (2-4 sentences on the most recent, fastest-moving work, naming papers by method or author and year; judge recent papers by velocity, not raw citations) and refs (the refs defining it; refs go only here).
 - outlook: 2-3 sentences on where the evidence suggests the field is heading next. Hedge only as much as the evidence requires.`;
 
 export function whatChangedGuide(diff: DiffDocument | null | undefined, refMap: SynthesisDossier["refMap"]): string {
   return diff
-    ? `- whatChanged: 2-4 sentences on what changed since the previous search, using the diff below (new papers, rising papers, cluster changes). Name the changes that matter, not a list of counts.
+    ? `- whatChanged: 2-4 sentences on what changed since the previous search, using the diff below (new papers, rising papers, cluster changes). Name the changes that matter, not a list of counts; name papers and clusters, never by ref or C-number.
 
 ${describeDiff(diff, refMap)}`
     : "- whatChanged: null (this is not a refresh).";

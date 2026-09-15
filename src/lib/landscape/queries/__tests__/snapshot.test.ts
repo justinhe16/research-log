@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { landscapeSnapshotFixture } from "@/components/landscape/__fixtures__/snapshot";
 import { createDb, type Db } from "@/lib/db/create";
+import { and, eq } from "drizzle-orm";
 import { searchDocuments, searches, topics } from "@/lib/db/schema";
 import { DEPTH_PRESETS } from "@/lib/landscape/constants";
 import { getLandscapeSnapshot } from "@/lib/landscape/queries/snapshot";
@@ -114,6 +115,25 @@ describe("getLandscapeSnapshot", () => {
       },
     ]);
     expect(snap.topic.summary).toBe("Synthesized summary");
+  });
+
+  it("rewrites leaked dossier refs in stored prose at read time", () => {
+    seedLandscape(db);
+    db.update(searchDocuments)
+      .set({
+        data: {
+          topicSummary: "Two tracks (C0, C1): P1 and P2 lead; see (P99).",
+          clusters: [{ idx: 0, name: "Named zero", summary: "Built on P3's idea.", keyIdeas: ["k"], representativePaperIds: ["p1"] }],
+        },
+      })
+      .where(and(eq(searchDocuments.searchId, "s1"), eq(searchDocuments.kind, "clusters")))
+      .run();
+    const snap = getLandscapeSnapshot(db, "s1")!;
+    const [p1, p2, p3] = snap.papers;
+    const label = (p: { authors: string[]; year: number | null }) => `${p.authors[0].split(" ").pop()}${p.authors.length > 1 ? " et al." : ""} ${p.year}`;
+    expect(snap.documents.clusters?.topicSummary).toBe(`Two tracks (Named zero; heuristic one): ${label(p1)} and ${label(p2)} lead; see.`);
+    expect(snap.topic.summary).toBe(snap.documents.clusters?.topicSummary);
+    expect(snap.documents.clusters?.clusters[0].summary).toBe(`Built on ${label(p3)}'s idea.`);
   });
 
   it("keeps only edges among selected papers", () => {

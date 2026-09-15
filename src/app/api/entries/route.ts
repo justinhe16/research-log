@@ -9,11 +9,35 @@ import { isJsonContentType } from "@/lib/same-origin";
 
 export const runtime = "nodejs";
 
+const optionalText = (max: number) =>
+  z
+    .string()
+    .trim()
+    .max(max)
+    .nullish()
+    .transform((v) => v || null);
+
+/** Paper metadata the caller already has (Landscape's "Log this paper"). */
+const seedSchema = z.object({
+  title: optionalText(500),
+  authors: z.array(z.string().trim().min(1).max(200)).max(100).nullish().transform((v) => v ?? []),
+  // A date we can't read is dropped rather than failing the whole log.
+  publishedAt: z
+    .string()
+    .trim()
+    .max(40)
+    .nullish()
+    .transform((v) => (v && /^\d{4}(-\d{2}(-\d{2})?)?([T ]\S*)?$/.test(v) ? v : null)),
+  venue: optionalText(300),
+  abstract: optionalText(20_000),
+});
+
 const createSchema = z.object({
   url: z.string().trim().min(1, "A URL is required."),
   category: z.enum(CATEGORIES).optional(),
   notes: z.string().optional(),
   whySaved: z.string().optional(),
+  seed: seedSchema.optional(),
 });
 
 function fail(message: string, status: number) {
@@ -54,6 +78,7 @@ export async function POST(request: Request) {
     const input = parsed.data;
     const now = new Date().toISOString();
     const id = crypto.randomUUID();
+    const seed = input.seed;
 
     db.insert(entries)
       .values({
@@ -62,6 +87,16 @@ export async function POST(request: Request) {
         category: input.category ?? "Other",
         notes: input.notes ?? "",
         whySaved: input.whySaved ?? "",
+        // Seeded metadata shows up right away, before (or even without) a successful fetch.
+        ...(seed
+          ? {
+              title: seed.title ?? "",
+              authors: seed.authors,
+              publishedAt: seed.publishedAt,
+              venue: seed.venue,
+              contentType: "paper",
+            }
+          : {}),
         ingestStatus: "pending",
         createdAt: now,
         updatedAt: now,
@@ -74,7 +109,7 @@ export async function POST(request: Request) {
 
     // Detached on purpose: the row shows up in the UI immediately and fills in
     // as ingest progresses. runIngest never throws, but belt-and-braces.
-    void runIngest(id).catch((err) => console.error("[ingest] unhandled", err));
+    void runIngest(id, { seed }).catch((err) => console.error("[ingest] unhandled", err));
 
     return Response.json({ entry: toEntry(row) }, { status: 201 });
   } catch (err) {

@@ -91,7 +91,7 @@ function xmlText(el: Element | null | undefined): string {
 }
 
 async function extractArxiv(id: string, canonicalUrl: string): Promise<ExtractedContent> {
-  const api = `http://export.arxiv.org/api/query?id_list=${encodeURIComponent(id)}`;
+  const api = `https://export.arxiv.org/api/query?id_list=${encodeURIComponent(id)}`;
   const res = await fetchWithTimeout(api, "application/atom+xml");
   const xml = await res.text();
 
@@ -264,6 +264,50 @@ async function extractHtml(u: URL, res: Response): Promise<ExtractedContent> {
     publishedAt: publishedAt ?? null,
     venue: null,
     org: siteName ?? null,
+  };
+}
+
+// ----------------------------------------------------------------- seed ----
+
+/** Metadata a caller already knows about a paper (e.g. Landscape "Log this paper"). */
+export type SeedMetadata = {
+  title?: string | null;
+  authors?: readonly string[] | null;
+  publishedAt?: string | null;
+  venue?: string | null;
+  abstract?: string | null;
+};
+
+/**
+ * Content built from seed metadata, used when fetching the URL fails. Needs an
+ * abstract (a title alone is not worth summarizing); null otherwise. Same text
+ * layout as the arXiv extractor.
+ */
+export function contentFromSeed(url: string, seed: SeedMetadata | null | undefined): ExtractedContent | null {
+  const abstract = tidy(seed?.abstract ?? "").replace(/\s*\n\s*/g, " ");
+  if (!seed || !abstract) return null;
+  const title = tidy(seed.title ?? "");
+  const authors = (seed.authors ?? []).map((a) => tidy(a)).filter(Boolean);
+  const venue = tidy(seed.venue ?? "") || null;
+  const text = tidy(
+    [
+      title && `Title: ${title}`,
+      authors.length && `Authors: ${authors.join(", ")}`,
+      venue && `Venue: ${venue}`,
+      `\nAbstract:\n${abstract}`,
+    ]
+      .filter(Boolean)
+      .join("\n"),
+  );
+  return {
+    url,
+    title,
+    text: clip(text),
+    contentType: "paper",
+    authors,
+    publishedAt: seed.publishedAt?.trim() || null,
+    venue,
+    org: null,
   };
 }
 

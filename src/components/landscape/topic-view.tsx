@@ -31,6 +31,7 @@ import { SearchProgress } from "./search-progress";
 import { StateMessage } from "./state-message";
 import { TimelineTab } from "./timeline/timeline-tab";
 import { TopicHeader } from "./topic-header";
+import { bumpNow } from "./use-now";
 import { activeSearchIdFrom, isActiveStatus, useSearchProgress } from "./use-search-progress";
 import { useSnapshot } from "./use-snapshot";
 import { useTopic } from "./use-topic";
@@ -114,6 +115,7 @@ export function TopicView({ topicId, hasS2Key }: TopicViewProps) {
 
   const handleSettled = useCallback(
     (p: SearchProgressData) => {
+      bumpNow();
       void refresh().catch(() => undefined);
       if (p.status === "done") {
         announceRef.current = p.id;
@@ -304,11 +306,19 @@ export function TopicView({ topicId, hasS2Key }: TopicViewProps) {
   }
 
   const showProgress = progress !== null && (isActiveStatus(progress.status) || progress.id === resumableLatest?.id);
+  // An older search pinned via History shows its own summary (none until its snapshot loads).
+  const viewingOlder = selectedSearchId !== null && latestDoneId !== null && selectedSearchId !== latestDoneId;
+  const headerSummary = viewingOlder
+    ? rawSnapshot?.search.id === selectedSearchId
+      ? rawSnapshot.topic.summary
+      : null
+    : topic.summary;
 
   return (
     <Shell>
       <TopicHeader
         topic={topic}
+        summary={headerSummary}
         selectedSearchId={selectedSearchId}
         onSelectSearch={(id) => setParams({ search: id === latestDoneId ? null : id })}
         onStartSearch={(input) => void startSearch(input)}

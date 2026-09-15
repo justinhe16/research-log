@@ -18,6 +18,7 @@ import {
 import { cn } from "@/lib/utils";
 import { AnimatedNumber } from "./animated-number";
 import { formatUsd, relativeTime, SEARCH_KIND_LABELS, SEARCH_STATUS_LABELS } from "./format";
+import { useNow } from "./use-now";
 import { LABEL_CLASS } from "./metric";
 
 type SearchProgressProps = {
@@ -68,7 +69,8 @@ export function SearchProgress({ progress, onCancel, onResume, onDismiss, busy =
   const active = progress.status === "queued" || progress.status === "running";
   const resumable = isResumable(progress.status);
   const failed = progress.status === "error" || progress.status === "interrupted";
-  const started = relativeTime(progress.startedAt ?? progress.createdAt);
+  const now = useNow();
+  const started = relativeTime(progress.startedAt ?? progress.createdAt, now);
   const pct = Math.round(progress.progress * 100);
 
   const headline =

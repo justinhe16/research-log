@@ -15,6 +15,7 @@ import { DEPTH_LABELS } from "@/lib/landscape/constants";
 import type { SearchSummary } from "@/lib/landscape/types";
 import { cn } from "@/lib/utils";
 import { formatUsd, relativeTime, SEARCH_KIND_LABELS, SEARCH_STATUS_LABELS } from "./format";
+import { useNow } from "./use-now";
 
 type SearchHistoryMenuProps = {
   /** Newest first. */
@@ -26,6 +27,7 @@ type SearchHistoryMenuProps = {
 
 /** Every search of a topic; picking a finished one shows its snapshot (`?search=`). */
 export function SearchHistoryMenu({ searches, selectedId, latestDoneId, onSelect }: SearchHistoryMenuProps) {
+  const now = useNow();
   const viewingOlder = selectedId !== null && latestDoneId !== null && selectedId !== latestDoneId;
 
   return (
@@ -46,7 +48,7 @@ export function SearchHistoryMenu({ searches, selectedId, latestDoneId, onSelect
         {searches.map((s) => {
           const selectable = s.status === "done";
           const selected = s.id === selectedId;
-          const when = relativeTime(s.finishedAt ?? s.startedAt ?? s.createdAt);
+          const when = relativeTime(s.finishedAt ?? s.startedAt ?? s.createdAt, now);
           return (
             <DropdownMenuItem
               key={s.id}

@@ -167,6 +167,18 @@ describe("listTopicCards / refreshTopicDenormalized", () => {
     expect(getTopicByIdOrSlug(db, a.id)).toEqual(ca);
   });
 
+  it("rewrites leaked refs in the card summary against the latest search", () => {
+    const a = createTopic(db, { name: "A", depth: "quick", embedding: null });
+    seedSearch("a-new", a.id, "done", { createdAt: "2026-02-01T00:00:00.000Z", finishedAt: "2026-02-01T01:00:00.000Z" });
+    seedSelectedPapers("a-new", 1, 0);
+    db.insert(searchDocuments)
+      .values({ searchId: "a-new", kind: "clusters", data: { topicSummary: "Led by P1 (P7); a P100 GPU." } })
+      .run();
+    refreshTopicDenormalized(db, a.id);
+    const card = listTopicCards(db).find((c) => c.id === a.id)!;
+    expect(card.summary).toBe("Led by a-new-p0; a P100 GPU.");
+  });
+
   it("resets denormalized fields when no done search remains", () => {
     const t = createTopic(db, { name: "T", depth: "quick", embedding: null });
     seedSearch("s1", t.id, "done", { finishedAt: "2026-02-01T00:00:00.000Z" });

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { InfoIcon } from "lucide-react";
 
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
@@ -33,6 +33,8 @@ export function DepthPicker({ value, onChange, hasS2Key, refreshDaysSince, disab
   }, [hasS2Key, refreshDaysSince]);
 
   const current = estimates[value];
+  // Controlled so a click or tap toggles the note too (a plain tooltip only opens on hover/focus).
+  const [noteOpen, setNoteOpen] = useState(false);
   const notes = hasS2Key === undefined ? current.notes.filter((n) => !n.startsWith("No Semantic Scholar")) : current.notes;
 
   return (
@@ -72,9 +74,18 @@ export function DepthPicker({ value, onChange, hasS2Key, refreshDaysSince, disab
         <Sep />
         <span className="tabular">{formatUsdRange(current.costUsd.low, current.costUsd.high)}</span>
         {notes.length > 0 ? (
-          <Tooltip>
-            <TooltipTrigger asChild>
+          <Tooltip open={noteOpen} onOpenChange={setNoteOpen}>
+            <TooltipTrigger
+              asChild
+              // Radix closes the tooltip on pointerdown/click; take over both so a tap opens it.
+              onPointerDown={(e) => e.preventDefault()}
+              onClick={(e) => {
+                e.preventDefault();
+                setNoteOpen((o) => !o);
+              }}
+            >
               <button
+                aria-expanded={noteOpen}
                 type="button"
                 className={cn(
                   "hover:text-foreground focus-visible:ring-ring/50 inline-flex items-center gap-1 rounded-sm transition-colors outline-none focus-visible:ring-2",
