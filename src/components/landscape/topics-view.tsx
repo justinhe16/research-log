@@ -10,7 +10,7 @@ import { TopicCard } from "./topic-card";
 import { useTopics } from "./use-topics";
 
 type TopicsViewProps = {
-  /** Whether the server has a Semantic Scholar key. Unknown (undefined) until C2 exposes it. */
+  /** Whether the server has a Semantic Scholar key (read server-side; never the key itself). */
   hasS2Key?: boolean;
 };
 

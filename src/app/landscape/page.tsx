@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { connection } from "next/server";
 import { Suspense } from "react";
 
 import { TopicsView, TopicsViewSkeleton } from "@/components/landscape/topics-view";
@@ -9,11 +10,17 @@ export const metadata: Metadata = {
 };
 
 export default function LandscapePage() {
-  // TopicsView reads `?fixture=` via useSearchParams, which needs a Suspense
-  // boundary so the rest of the route can still be prerendered.
+  // TopicsView reads `?fixture=` via useSearchParams, which needs a Suspense boundary.
   return (
     <Suspense fallback={<TopicsViewSkeleton />}>
-      <TopicsView />
+      <TopicsWithConfig />
     </Suspense>
   );
+}
+
+async function TopicsWithConfig() {
+  // Read the env at request time (not baked in at build) and pass only a boolean.
+  await connection();
+  const hasS2Key = Boolean(process.env.SEMANTIC_SCHOLAR_API_KEY?.trim());
+  return <TopicsView hasS2Key={hasS2Key} />;
 }

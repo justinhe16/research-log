@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import { AddEntryForm } from "./add-entry-form";
 import { EntriesTable } from "./entries-table";
@@ -50,6 +51,12 @@ export function EntriesView() {
         onRetry={handleRetry}
       />
 
+      {/* Deep link from elsewhere (e.g. Landscape's "In your log"): /logs?entry=<id>. Its
+          own Suspense boundary keeps the rest of the page prerenderable. */}
+      <Suspense fallback={null}>
+        <OpenEntryFromQuery onOpen={setSelectedId} />
+      </Suspense>
+
       <EntryDetailDialog
         entry={selected}
         open={selectedId !== null && selected !== null}
@@ -63,4 +70,23 @@ export function EntriesView() {
       />
     </div>
   );
+}
+
+/** Opens the entry named by `?entry=` once, then drops the param so closing the dialog sticks. */
+function OpenEntryFromQuery({ onOpen }: { onOpen: (id: string) => void }) {
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
+  const entryId = searchParams.get("entry");
+
+  useEffect(() => {
+    if (!entryId) return;
+    onOpen(entryId);
+    const next = new URLSearchParams(searchParams.toString());
+    next.delete("entry");
+    const qs = next.toString();
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+  }, [entryId, onOpen, pathname, router, searchParams]);
+
+  return null;
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { FileQuestionIcon, Loader2Icon, RotateCwIcon, SearchXIcon, TriangleAlertIcon, WaypointsIcon } from "lucide-react";
@@ -31,7 +31,7 @@ import { SearchProgress } from "./search-progress";
 import { StateMessage } from "./state-message";
 import { TimelineTab } from "./timeline/timeline-tab";
 import { TopicHeader } from "./topic-header";
-import { isActiveStatus, useSearchProgress } from "./use-search-progress";
+import { activeSearchIdFrom, isActiveStatus, useSearchProgress } from "./use-search-progress";
 import { useSnapshot } from "./use-snapshot";
 import { useTopic } from "./use-topic";
 
@@ -60,7 +60,7 @@ function isTab(value: string | null): value is TopicTab {
 
 type TopicViewProps = {
   topicId: string;
-  /** Whether the server has a Semantic Scholar key. Unknown until C2 exposes it. */
+  /** Whether the server has a Semantic Scholar key (read server-side; never the key itself). */
   hasS2Key?: boolean;
 };
 
@@ -104,20 +104,60 @@ export function TopicView({ topicId, hasS2Key }: TopicViewProps) {
       : null;
   const trackedSearchId = topic?.activeSearch?.id ?? resumableLatest?.id ?? null;
 
+  // --- snapshot ---------------------------------------------------------------
+  // While a new search runs, the latest *done* search stays selected, so the previous
+  // landscape keeps rendering beneath the progress stepper.
+  const { snapshot: rawSnapshot, error: snapshotError, isLoading: snapshotLoading, reload } = useSnapshot(selectedSearchId);
+
+  // A search that just finished: once its snapshot is on screen, toast what changed.
+  const announceRef = useRef<string | null>(null);
+
   const handleSettled = useCallback(
     (p: SearchProgressData) => {
       void refresh().catch(() => undefined);
       if (p.status === "done") {
-        toast.success("Landscape updated", { description: `${p.paperCount} papers` });
-        setParams({ search: null });
+        announceRef.current = p.id;
+        // Jump to the new landscape (drops `?search=` if an older one was pinned). A
+        // synthesis retry re-finishes the selected search, whose id doesn't change: refetch it.
+        if (p.id === selectedSearchId) reload();
+        else setParams({ search: null });
       }
     },
-    [refresh, setParams],
+    [refresh, reload, selectedSearchId, setParams],
   );
+
+  useEffect(() => {
+    if (!rawSnapshot || announceRef.current !== rawSnapshot.search.id) return;
+    announceRef.current = null;
+    const diff = rawSnapshot.documents.diff;
+    if (diff) {
+      const n = diff.newPaperIds.length;
+      toast.success(`Landscape updated · ${n} new ${n === 1 ? "paper" : "papers"}`);
+    } else {
+      toast.success("Landscape updated", { description: `${rawSnapshot.papers.length} papers` });
+    }
+  }, [rawSnapshot]);
   const { progress, error: pollError, update: updateProgress } = useSearchProgress(trackedSearchId, handleSettled);
   const searchActive = progress ? isActiveStatus(progress.status) : topic?.activeSearch !== null && topic !== null;
 
   const [busy, setBusy] = useState<"cancel" | "resume" | "start" | "retry" | null>(null);
+
+  /** On a 409 naming a running search, show that search's progress. Returns whether it did. */
+  const followActiveSearch = useCallback(
+    async (err: unknown, opts: { silent?: boolean } = {}) => {
+      const activeId = activeSearchIdFrom(err);
+      if (!activeId) return false;
+      if (!opts.silent) toast.message("A search is already running", { description: "Showing its progress." });
+      try {
+        updateProgress(await landscapeApi.getSearch(activeId));
+      } catch {
+        /* the topic refresh below still picks it up as activeSearch */
+      }
+      await refresh().catch(() => undefined);
+      return true;
+    },
+    [refresh, updateProgress],
+  );
 
   const startSearch = useCallback(
     async (input: StartSearchInput) => {
@@ -133,13 +173,35 @@ export function TopicView({ topicId, hasS2Key }: TopicViewProps) {
         updateProgress(search);
         await refresh();
       } catch (err) {
-        toast.error(errorMessage(err, "Could not start a search."));
+        if (!(await followActiveSearch(err))) toast.error(errorMessage(err, "Could not start a search."));
       } finally {
         setBusy(null);
       }
     },
-    [fixture, refresh, topicId, updateProgress],
+    [fixture, followActiveSearch, refresh, topicId, updateProgress],
   );
+
+  const deleteTopic = useCallback(async (): Promise<boolean> => {
+    if (!topic) return false;
+    if (fixture) {
+      toast.message("Fixture mode: topics are not deleted.");
+      return false;
+    }
+    try {
+      await landscapeApi.deleteTopic(topic.id);
+      toast.success("Topic deleted", { description: topic.name });
+      router.push("/landscape");
+      return true;
+    } catch (err) {
+      if (activeSearchIdFrom(err)) {
+        toast.error("A search is still running", { description: "Cancel it first, then delete this topic." });
+        await followActiveSearch(err, { silent: true });
+      } else {
+        toast.error(errorMessage(err, "Could not delete this topic."));
+      }
+      return false;
+    }
+  }, [fixture, followActiveSearch, router, topic]);
 
   const cancelSearch = useCallback(async () => {
     if (!progress) return;
@@ -173,9 +235,6 @@ export function TopicView({ topicId, hasS2Key }: TopicViewProps) {
       setBusy(null);
     }
   }, [fixture, progress, refresh, updateProgress]);
-
-  // --- snapshot ---------------------------------------------------------------
-  const { snapshot: rawSnapshot, error: snapshotError, isLoading: snapshotLoading, reload } = useSnapshot(selectedSearchId);
 
   // Papers logged from the sheet during this visit, applied on top of the snapshot.
   const [loggedOverrides, setLoggedOverrides] = useState<Record<string, string>>({});
@@ -255,6 +314,7 @@ export function TopicView({ topicId, hasS2Key }: TopicViewProps) {
         onStartSearch={(input) => void startSearch(input)}
         searchActive={searchActive}
         starting={busy === "start"}
+        onDelete={deleteTopic}
         hasS2Key={hasS2Key}
         fixture={fixture}
       />

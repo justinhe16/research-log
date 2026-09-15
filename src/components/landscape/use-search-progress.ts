@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { landscapeApi } from "@/lib/landscape/api-client";
+import { ApiError, landscapeApi } from "@/lib/landscape/api-client";
 import { SEARCH_POLL_INTERVAL_MS } from "@/lib/landscape/constants";
 import { ACTIVE_SEARCH_STATUSES, type SearchProgress, type SearchStatus } from "@/lib/landscape/types";
 import { useFixtureMode } from "./fixture-mode";
@@ -10,6 +10,13 @@ import { errorMessage } from "./format";
 
 export function isActiveStatus(status: SearchStatus): boolean {
   return (ACTIVE_SEARCH_STATUSES as readonly SearchStatus[]).includes(status);
+}
+
+/** The running search named by a 409 (start search / delete topic while one is active), if any. */
+export function activeSearchIdFrom(err: unknown): string | null {
+  if (!(err instanceof ApiError) || err.status !== 409) return null;
+  const id = (err.payload as { activeSearchId?: unknown } | undefined)?.activeSearchId;
+  return typeof id === "string" && id ? id : null;
 }
 
 type State = { searchId: string; progress: SearchProgress | null; error: string | null };

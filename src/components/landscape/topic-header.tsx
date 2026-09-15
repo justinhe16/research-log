@@ -2,9 +2,17 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { ArrowLeftIcon, ChevronDownIcon, Loader2Icon, RefreshCwIcon } from "lucide-react";
+import { ArrowLeftIcon, ChevronDownIcon, EllipsisIcon, Loader2Icon, RefreshCwIcon, Trash2Icon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -29,6 +37,8 @@ type TopicHeaderProps = {
   /** A search is queued/running, so new ones are blocked. */
   searchActive: boolean;
   starting: boolean;
+  /** Delete the topic after confirmation; resolves true when it was deleted. */
+  onDelete: () => Promise<boolean>;
   hasS2Key?: boolean;
   fixture?: FixtureMode | null;
 };
@@ -40,9 +50,12 @@ export function TopicHeader({
   onStartSearch,
   searchActive,
   starting,
+  onDelete,
   hasS2Key,
   fixture = null,
 }: TopicHeaderProps) {
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [now] = useState(() => Date.now());
   const latestDone = topic.lastSearch;
@@ -139,8 +152,54 @@ export function TopicHeader({
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
+
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon-sm" aria-label="Topic actions">
+                <EllipsisIcon />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-44">
+              <DropdownMenuItem variant="destructive" onSelect={() => setConfirmDelete(true)} className="text-xs">
+                <Trash2Icon />
+                Delete topic…
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
+
+      <Dialog open={confirmDelete} onOpenChange={(open) => !deleting && setConfirmDelete(open)}>
+        <DialogContent showCloseButton={false}>
+          <DialogHeader>
+            <DialogTitle>Delete “{topic.name}”?</DialogTitle>
+            <DialogDescription>
+              {topic.searches.length > 1 ? `All ${topic.searches.length} of its searches` : "Its searches"} and
+              landscapes are removed. Papers already in your log stay.
+              {searchActive ? " A search is running now: cancel it before deleting." : ""}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" size="sm" disabled={deleting} onClick={() => setConfirmDelete(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              disabled={deleting}
+              onClick={async () => {
+                setDeleting(true);
+                const deleted = await onDelete();
+                setDeleting(false);
+                if (!deleted) setConfirmDelete(false);
+              }}
+            >
+              {deleting ? <Loader2Icon className="animate-spin" data-icon="inline-start" /> : null}
+              Delete topic
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {summary ? (
         <div className="flex flex-col items-start gap-1">

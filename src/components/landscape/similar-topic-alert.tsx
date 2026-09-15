@@ -12,6 +12,8 @@ import { relativeTime } from "./format";
 type SimilarTopicAlertProps = {
   name: string;
   similar: SimilarTopic[];
+  /** One of `similar` has this exact name, so creating another is refused. */
+  exactMatch?: boolean;
   /** Which action is in flight, to show a spinner and lock the others. */
   busy: { kind: "refresh"; topicId: string } | { kind: "create" } | null;
   onRefresh: (topic: SimilarTopic) => void;
@@ -24,6 +26,7 @@ type SimilarTopicAlertProps = {
 export function SimilarTopicAlert({
   name,
   similar,
+  exactMatch = false,
   busy,
   onRefresh,
   onCreateAnyway,
@@ -35,11 +38,16 @@ export function SimilarTopicAlert({
     <Alert className="border-border/70 animate-in fade-in-0 slide-in-from-top-1 gap-2 rounded-xl px-4 py-3.5 shadow-sm duration-150">
       <CopyIcon className="text-muted-foreground" />
       <AlertTitle className="pr-8 text-sm">
-        {single ? "A similar topic already exists" : `${similar.length} similar topics already exist`}
+        {exactMatch
+          ? `A topic named “${name}” already exists`
+          : single
+            ? "A similar topic already exists"
+            : `${similar.length} similar topics already exist`}
       </AlertTitle>
       <AlertDescription className="text-xs">
-        Refreshing an existing topic reuses its papers and only reads what is new, so it is faster and cheaper than
-        starting over.
+        {exactMatch
+          ? "Open it, or refresh it to read what is new. To keep a separate topic, give yours a different name."
+          : "Refreshing an existing topic reuses its papers and only reads what is new, so it is faster and cheaper than starting over."}
       </AlertDescription>
 
       <ul className="col-start-2 mt-1.5 flex flex-col gap-1.5">
@@ -88,12 +96,14 @@ export function SimilarTopicAlert({
         })}
       </ul>
 
+      {exactMatch ? null : (
       <div className="col-start-2 mt-1 flex items-center gap-2">
         <Button size="sm" variant="ghost" className="text-muted-foreground -ml-2.5 text-xs" disabled={busy !== null} onClick={onCreateAnyway}>
           {busy?.kind === "create" ? <Loader2Icon className="animate-spin" data-icon="inline-start" /> : null}
           Create “{name}” anyway
         </Button>
       </div>
+      )}
 
       <Button
         variant="ghost"

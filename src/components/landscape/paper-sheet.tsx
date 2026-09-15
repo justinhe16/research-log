@@ -150,7 +150,7 @@ function PaperSheetBody({
         <div className="mt-1 flex flex-wrap items-center gap-1.5">
           {loggedEntryId ? (
             <Button asChild size="sm" variant="secondary" className="text-xs">
-              <Link href="/logs">
+              <Link href={`/logs?entry=${encodeURIComponent(loggedEntryId)}`}>
                 <BookmarkCheckIcon data-icon="inline-start" />
                 In your log
               </Link>

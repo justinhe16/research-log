@@ -17,9 +17,10 @@ import { DepthPicker } from "./depth-picker";
 import { withFixture, type FixtureMode } from "./fixture-mode";
 import { errorMessage } from "./format";
 import { SimilarTopicAlert } from "./similar-topic-alert";
+import { activeSearchIdFrom } from "./use-search-progress";
 
 type NewTopicBarProps = {
-  /** Whether the server has a Semantic Scholar key; unknown until the API reports it. */
+  /** Whether the server has a Semantic Scholar key (read server-side). */
   hasS2Key?: boolean;
   fixture?: FixtureMode | null;
   /** Called after a topic is created or a refresh starts, before navigating. */
@@ -27,6 +28,12 @@ type NewTopicBarProps = {
 };
 
 type Busy = { kind: "refresh"; topicId: string } | { kind: "create" } | null;
+
+/** Same key as the server's exact-duplicate check (`normalizeTopicName`). */
+function sameName(a: string, b: string): boolean {
+  const norm = (x: string) => x.normalize("NFKC").toLowerCase().replace(/\s+/g, " ").trim();
+  return norm(a) === norm(b);
+}
 
 export function NewTopicBar({ hasS2Key, fixture = null, onStarted }: NewTopicBarProps) {
   const router = useRouter();
@@ -36,6 +43,8 @@ export function NewTopicBar({ hasS2Key, fixture = null, onStarted }: NewTopicBar
   const [descFocused, setDescFocused] = useState(false);
   const [busy, setBusy] = useState<Busy>(null);
   const [similar, setSimilar] = useState<SimilarTopic[] | null>(null);
+  /** The 409 was an exact-name duplicate, which `force` cannot override. */
+  const [exactDuplicate, setExactDuplicate] = useState(false);
 
   const trimmed = name.trim();
   const canSubmit = trimmed.length > 0 && busy === null;
@@ -55,6 +64,7 @@ export function NewTopicBar({ hasS2Key, fixture = null, onStarted }: NewTopicBar
         const [first] = fixtureTopics("done");
         if (!force) {
           setSimilar([{ ...first, similarity: 0.86 }]);
+          setExactDuplicate(false);
           return;
         }
         toast.success("Fixture mode: pretending to start the search.");
@@ -73,7 +83,11 @@ export function NewTopicBar({ hasS2Key, fixture = null, onStarted }: NewTopicBar
     } catch (err) {
       const conflicts = similarTopicsFrom(err);
       if (conflicts && conflicts.length > 0) {
-        setSimilar(conflicts);
+        // Exact duplicates are refused even with force; put that topic first.
+        const exact = conflicts.filter((c) => sameName(c.name, trimmed));
+        setSimilar([...exact, ...conflicts.filter((c) => !exact.includes(c))]);
+        // With force the server only refuses exact duplicates.
+        setExactDuplicate(force || exact.length > 0);
       } else {
         toast.error(errorMessage(err, "Could not create that topic."));
       }
@@ -89,6 +103,12 @@ export function NewTopicBar({ hasS2Key, fixture = null, onStarted }: NewTopicBar
       toast.success("Refresh started", { description: topic.name });
       goTo(topic.id);
     } catch (err) {
+      if (activeSearchIdFrom(err)) {
+        // Already searching: open the topic, which shows the running search's progress.
+        toast.message("A search is already running", { description: topic.name });
+        goTo(topic.id);
+        return;
+      }
       toast.error(errorMessage(err, "Could not start a refresh."));
     } finally {
       setBusy(null);
@@ -171,6 +191,7 @@ export function NewTopicBar({ hasS2Key, fixture = null, onStarted }: NewTopicBar
         <SimilarTopicAlert
           name={trimmed}
           similar={similar}
+          exactMatch={exactDuplicate}
           busy={busy}
           fixture={fixture}
           onRefresh={(t) => void refreshExisting(t)}
