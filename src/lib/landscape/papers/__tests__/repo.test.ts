@@ -6,6 +6,7 @@ import {
   paperExtractions,
   paperFulltext,
   papers,
+  searchDocuments,
   searchEdges,
   searchPapers,
   searches,
@@ -297,6 +298,52 @@ describe("mergePapers", () => {
     mergePapers(db, "A", ["A", "C"]);
     expect(db.select().from(papers).all().map((p) => p.id).sort()).toEqual(["A", "B", "X"]);
     expect(get("A").s2Id).toBe("s2-1");
+  });
+
+  it("rewrites paper ids inside search_documents JSON, leaving unrelated documents alone", () => {
+    seed();
+    const untouchedAt = "2026-01-01T00:00:00.000Z";
+    db.insert(searchDocuments)
+      .values([
+        {
+          searchId: "s1",
+          kind: "reading_path",
+          data: { steps: [
+            { phase: "foundations", paperId: "B", reason: "r1" },
+            { phase: "core", paperId: "A", reason: "r2" },
+            { phase: "frontier", paperId: "X", reason: "r3" },
+          ] },
+          createdAt: untouchedAt,
+          updatedAt: untouchedAt,
+        },
+        {
+          searchId: "s2",
+          kind: "gaps",
+          data: { gaps: [{ title: "g", description: "d", evidencePaperIds: ["C", "X"], directions: [] }] },
+          createdAt: untouchedAt,
+          updatedAt: untouchedAt,
+        },
+        {
+          searchId: "s1",
+          kind: "clusters",
+          data: { topicSummary: "t", clusters: [{ idx: 0, name: "n", summary: "s", keyIdeas: [], representativePaperIds: ["X"] }] },
+          createdAt: untouchedAt,
+          updatedAt: untouchedAt,
+        },
+      ])
+      .run();
+
+    mergePapers(db, "A", ["B", "C"]);
+
+    const doc = (searchId: string, kind: "reading_path" | "gaps" | "clusters") =>
+      db.select().from(searchDocuments).all().find((d) => d.searchId === searchId && d.kind === kind)!;
+    // B -> A collapses onto the existing A step (first occurrence wins).
+    expect(doc("s1", "reading_path").data).toEqual({ steps: [
+      { phase: "foundations", paperId: "A", reason: "r1" },
+      { phase: "frontier", paperId: "X", reason: "r3" },
+    ] });
+    expect((doc("s2", "gaps").data as { gaps: { evidencePaperIds: string[] }[] }).gaps[0].evidencePaperIds).toEqual(["A", "X"]);
+    expect(doc("s1", "clusters").updatedAt).toBe(untouchedAt);
   });
 });
 

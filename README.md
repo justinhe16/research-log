@@ -85,8 +85,32 @@ curl -F file=@research-log-2026-09-10.json http://localhost:3000/api/import
 curl -F file=@research-log-2026-09-10.json 'http://localhost:3000/api/import?mode=replace'
 ```
 
-Import responds with `{ imported, skipped, replaced, missingEmbeddings }` and
-runs in a single transaction — a malformed file gets a 400 and writes nothing.
+The export is backup format **version 2**: `{ version, exportedAt, count,
+entries, landscape }`, where `landscape` holds every Landscape table (topics,
+searches and their stages / papers / clusters / edges / documents, papers, full
+text, citations, extractions, LLM call history) except the disposable HTTP
+cache. Vectors and cluster centroids are base64; JSON columns stay JSON. The
+body is streamed row by row, but full text is usually most of the file — pass
+`?fulltext=0` to leave it out (`curl -OJ 'http://localhost:3000/api/export?fulltext=0'`).
+Import reads the whole file into memory and caps uploads at 256 MB.
+
+Version 1 files (entries only) still import. On import:
+
+- **Merge** never overwrites an existing row. Topics, searches and LLM calls
+  with an existing id are skipped; a topic whose slug belongs to a *different*
+  topic is imported with a `-2` suffix. Papers go through the dedupe resolver,
+  so a paper you already have (same arXiv / DOI / S2 / OpenAlex id) is reused
+  and every citation, extraction, full text and search row pointing at the
+  incoming copy is remapped onto it. Searches whose topic is missing are skipped.
+- **Replace** also wipes the Landscape tables — but only when the file has a
+  `landscape` section, so restoring a v1 file never deletes Landscape data. A
+  `?fulltext=0` export restored with replace leaves you without full text.
+- Searches that were queued or running at export time come back as
+  `interrupted` (resume them from the topic page).
+
+Import responds with `{ imported, skipped, replaced, missingEmbeddings,
+landscape? }` (`landscape` has per-table counts plus `skipped` details) and runs
+in a single transaction — a malformed file gets a 400 and writes nothing.
 Entries that arrive without a vector are stored with `embedding = null` rather
 than blocking the request on a re-embed; backfill them afterwards:
 

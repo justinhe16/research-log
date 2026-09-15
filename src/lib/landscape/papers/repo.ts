@@ -1,6 +1,7 @@
-import { asc, eq, inArray, or, sql, type SQL } from "drizzle-orm";
+import { and, asc, eq, inArray, or, sql, type SQL } from "drizzle-orm";
 import type { Db } from "@/lib/db/create";
-import { papers, type NewPaperRow, type PaperRow } from "@/lib/db/schema";
+import { papers, searchDocuments, type NewPaperRow, type PaperRow } from "@/lib/db/schema";
+import { remapDocumentPaperIds } from "@/lib/landscape/documents/remap";
 import {
   normalizeArxivId,
   normalizeDoi,
@@ -441,6 +442,8 @@ function mergeInto(db: Db, keepId: string, dropIds: string[]): void {
     db.run(sql`DELETE FROM paper_fulltext WHERE paper_id = ${drop}`);
   }
 
+  remapDocumentsInto(db, keepId, dropRows.map((d) => d.id));
+
   // Clear ids on the dropped rows first so the keeper can take them without
   // tripping the unique indexes, then write the keeper and delete the rest.
   db.update(papers)
@@ -474,6 +477,31 @@ function mergeInto(db: Db, keepId: string, dropIds: string[]): void {
   db.delete(papers)
     .where(inArray(papers.id, dropRows.map((d) => d.id)))
     .run();
+}
+
+/** Rewrite paper ids embedded in `search_documents.data` from dropped ids to the
+ *  keeper. The LIKE prefilter keeps this from rewriting every stored document. */
+function remapDocumentsInto(db: Db, keepId: string, dropIds: string[]): void {
+  const dropped = new Set(dropIds);
+  for (let i = 0; i < dropIds.length; i += IN_CHUNK) {
+    const chunk = dropIds.slice(i, i + IN_CHUNK);
+    const rows = db
+      .select({ searchId: searchDocuments.searchId, kind: searchDocuments.kind, data: searchDocuments.data })
+      .from(searchDocuments)
+      .where(
+        or(...chunk.map((id) => sql`${searchDocuments.data} LIKE ${`%"${id.replace(/[\\%_]/g, "\\$&")}"%`} ESCAPE '\\'`)),
+      )
+      .all();
+    for (const row of rows) {
+      if (row.data == null) continue;
+      const next = remapDocumentPaperIds(row.kind, row.data, (id) => (dropped.has(id) ? keepId : id));
+      if (JSON.stringify(next) === JSON.stringify(row.data)) continue;
+      db.update(searchDocuments)
+        .set({ data: next, updatedAt: new Date().toISOString() })
+        .where(and(eq(searchDocuments.searchId, row.searchId), eq(searchDocuments.kind, row.kind)))
+        .run();
+    }
+  }
 }
 
 /**
