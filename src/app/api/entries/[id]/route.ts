@@ -4,6 +4,7 @@ import { CATEGORIES, STATUSES } from "@/lib/constants";
 import { db } from "@/lib/db";
 import { entries } from "@/lib/db/schema";
 import { toEntry } from "@/lib/serialize";
+import { isJsonContentType } from "@/lib/same-origin";
 
 export const runtime = "nodejs";
 
@@ -44,6 +45,10 @@ export async function PATCH(request: Request, { params }: Ctx) {
   try {
     const { id } = await params;
     if (!getRow(id)) return fail("Entry not found.", 404);
+
+    if (!isJsonContentType(request.headers.get("content-type"))) {
+      return fail("Content-Type must be application/json.", 415);
+    }
 
     let body: unknown;
     try {

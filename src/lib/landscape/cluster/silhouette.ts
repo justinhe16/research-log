@@ -37,11 +37,6 @@ export function cosineSim(a: Vec, b: Vec): number {
   return aa > 0 && bb > 0 ? ab / Math.sqrt(aa * bb) : 0;
 }
 
-/** Cosine distance (1 - cos) for already-normalized vectors. */
-export function cosineDistance(a: Vec, b: Vec): number {
-  return 1 - dot(a, b);
-}
-
 /** Symmetric n×n cosine-distance matrix, row-major. Normalizes internally. */
 export function cosineDistanceMatrix(vectors: readonly Vec[]): Float64Array {
   const n = vectors.length;

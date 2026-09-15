@@ -727,7 +727,8 @@ export async function assertPublicUrl(url: string): Promise<URL> {
   if (parsed.username || parsed.password) {
     throw new UnsafeUrlError(`URLs with credentials are not allowed: ${url}`);
   }
-  const hostname = parsed.hostname.replace(/^\[|\]$/g, "");
+  // Strip IPv6 brackets and a trailing root dot ("localhost." is still localhost).
+  const hostname = parsed.hostname.replace(/^\[|\]$/g, "").replace(/\.+$/, "");
   if (!hostname) throw new UnsafeUrlError(`URL has no host: ${url}`);
 
   let addresses: string[];

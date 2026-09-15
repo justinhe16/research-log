@@ -5,6 +5,7 @@ import { searches } from "@/lib/db/schema";
 import { toSearchProgress } from "@/lib/landscape/pipeline/progress";
 import { createSearch, startSearch } from "@/lib/landscape/pipeline/runner";
 import { getLatestDoneSearchId, toDepth } from "@/lib/landscape/queries/searches";
+import { checkSearchSpendCap } from "@/lib/landscape/spend-cap";
 import { getTopicRow } from "@/lib/landscape/queries/topic-repo";
 import { DEPTHS } from "@/lib/landscape/types";
 import { fail, parseBody } from "../../../_lib/http";
@@ -24,6 +25,7 @@ const startSchema = z.object({
  * Depth defaults to the base search's depth for a refresh, else the topic default.
  * Body: StartSearchInput
  * Responds: 201 { search: SearchProgress } | 400 | 404 | 409 { error } (a search is already active, or nothing to refresh)
+ *   | 429 { error } (LANDSCAPE_MAX_SEARCHES_PER_HOUR reached)
  */
 export async function POST(request: Request, { params }: Ctx) {
   try {
@@ -48,6 +50,9 @@ export async function POST(request: Request, { params }: Ctx) {
       : undefined;
     const depth =
       parsed.data.depth ?? (mode === "refresh" && baseDepth ? toDepth(baseDepth) : toDepth(topic.defaultDepth));
+
+    const cap = checkSearchSpendCap(db);
+    if (!cap.ok) return fail(cap.error, 429);
 
     const created = createSearch(db, { topicId: topic.id, kind: mode, depth, baseSearchId: baseId });
     if (!created.ok) {

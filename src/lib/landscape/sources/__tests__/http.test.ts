@@ -571,4 +571,10 @@ describe("assertPublicUrl", () => {
     await expect(assertPublicUrl("https://ok.example/x")).resolves.toBeInstanceOf(URL);
     await expect(assertPublicUrl("http://localhost:3000/")).rejects.toBeInstanceOf(UnsafeUrlError);
   });
+
+  it("treats a trailing-dot hostname as the same host", async () => {
+    setHttpDeps({ lookup: async () => ["8.8.8.8"] }); // would pass if the localhost check were skipped
+    await expect(assertPublicUrl("http://localhost./")).rejects.toBeInstanceOf(UnsafeUrlError);
+    await expect(assertPublicUrl("http://foo.localhost./x")).rejects.toBeInstanceOf(UnsafeUrlError);
+  });
 });

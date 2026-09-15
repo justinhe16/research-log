@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 import { parseExportFile, type ParsedExportFile } from "@/lib/backup-format";
 import { importBackup, type ImportResult } from "@/lib/backup-io";
+import { mediaType } from "@/lib/same-origin";
 
 export const runtime = "nodejs";
 
@@ -13,6 +14,12 @@ function bad(message: string) {
 class TooLarge extends Error {
   constructor() {
     super("Backup file is too large");
+  }
+}
+
+class UnsupportedType extends Error {
+  constructor() {
+    super("Content-Type must be multipart/form-data or application/json");
   }
 }
 
@@ -50,9 +57,11 @@ async function readPayload(req: Request): Promise<unknown> {
   if (Number.isFinite(declared) && declared > MAX_BYTES) throw new TooLarge();
 
   const contentType = req.headers.get("content-type") ?? "";
+  const type = mediaType(contentType);
+  if (type !== "multipart/form-data" && type !== "application/json") throw new UnsupportedType();
   const bytes = await readCapped(req);
 
-  if (contentType.includes("multipart/form-data")) {
+  if (type === "multipart/form-data") {
     // Re-wrap the capped bytes so formData() never sees more than MAX_BYTES.
     const form = await new Response(bytes, { headers: { "content-type": contentType } }).formData();
     const file = form.get("file");
@@ -81,6 +90,7 @@ export async function POST(req: Request) {
     raw = await readPayload(req);
   } catch (err) {
     if (err instanceof TooLarge) return Response.json({ error: err.message }, { status: 413 });
+    if (err instanceof UnsupportedType) return Response.json({ error: err.message }, { status: 415 });
     return bad(err instanceof SyntaxError ? "File is not valid JSON" : String((err as Error).message));
   }
 

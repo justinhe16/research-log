@@ -1,4 +1,5 @@
 import type { z } from "zod";
+import { isJsonContentType } from "@/lib/same-origin";
 import type { SearchActionResult } from "@/lib/landscape/pipeline/runner";
 
 /* Shared helpers for the Landscape route handlers (private folder: not a route). */
@@ -13,7 +14,10 @@ export function issuesMessage(error: z.ZodError): string {
 
 type Parsed<T> = { ok: true; data: T } | { ok: false; response: Response };
 
-/** Read and validate a JSON body. `allowEmpty` treats a missing body as `{}`. */
+export const JSON_CONTENT_TYPE_ERROR = "Content-Type must be application/json.";
+
+/** Read and validate a JSON body. `allowEmpty` treats a missing body as `{}`.
+ *  A non-empty body must be sent as `Content-Type: application/json` (415 otherwise). */
 export async function parseBody<T>(
   request: Request,
   schema: z.ZodType<T>,
@@ -25,6 +29,8 @@ export async function parseBody<T>(
     if (!text.trim()) {
       if (!allowEmpty) return { ok: false, response: fail("Request body must be valid JSON.", 400) };
       body = {};
+    } else if (!isJsonContentType(request.headers.get("content-type"))) {
+      return { ok: false, response: fail(JSON_CONTENT_TYPE_ERROR, 415) };
     } else {
       body = JSON.parse(text);
     }

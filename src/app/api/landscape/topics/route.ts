@@ -5,6 +5,7 @@ import { toSearchProgress } from "@/lib/landscape/pipeline/progress";
 import { markStaleSearches } from "@/lib/landscape/pipeline/recovery";
 import { createSearch, isSearchRunning, startSearch } from "@/lib/landscape/pipeline/runner";
 import { createTopic, deleteTopic, getTopicByIdOrSlug, listTopicCards } from "@/lib/landscape/queries/topic-repo";
+import { checkSearchSpendCap } from "@/lib/landscape/spend-cap";
 import { findSimilarTopics, findSimilarTopicsFor } from "@/lib/landscape/topic-dedupe";
 import { DEPTHS, type CreateTopicResponse, type SimilarTopic, type SimilarTopicsConflict } from "@/lib/landscape/types";
 import { fail, parseBody } from "../_lib/http";
@@ -43,12 +44,17 @@ export async function GET() {
  * Create a topic and queue its initial search.
  * Body: CreateTopicInput
  * Responds: 201 CreateTopicResponse | 409 SimilarTopicsConflict (unless force) | 400 { error }
+ *   | 429 { error } (LANDSCAPE_MAX_SEARCHES_PER_HOUR reached)
  */
 export async function POST(request: Request) {
   try {
     const parsed = await parseBody(request, createSchema);
     if (!parsed.ok) return parsed.response;
     const input = parsed.data;
+
+    // Checked before the (slow) embedding, and again under the lock just before inserting.
+    const cap = checkSearchSpendCap(db);
+    if (!cap.ok) return fail(cap.error, 429);
 
     const conflict = (similar: SimilarTopic[], error = "Similar topics already exist.") => {
       const body: SimilarTopicsConflict = { error, similar };
@@ -70,6 +76,9 @@ export async function POST(request: Request) {
         const again = findSimilarTopics(db, embedding, { queryName: input.name });
         if (again.length > 0) return { response: conflict(again) } as const;
       }
+
+      const capNow = checkSearchSpendCap(db);
+      if (!capNow.ok) return { response: fail(capNow.error, 429) } as const;
 
       const topic = createTopic(db, { ...input, embedding });
       const created = createSearch(db, { topicId: topic.id, kind: "initial", depth: input.depth });

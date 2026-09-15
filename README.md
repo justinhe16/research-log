@@ -58,6 +58,73 @@ without re-reading anything:
 **System** — `embedding` (the vector), `rawText` (fetched page text, kept so a
 re-summarize doesn't need a re-fetch), `ingestStatus` / `ingestError`, timestamps.
 
+## Landscape
+
+`/landscape` maps a research area instead of a single URL. Name a topic (plus an
+optional description) and a background pipeline expands it into search queries,
+pulls candidates from arXiv and Semantic Scholar (with OpenAlex as a fallback for
+metadata), follows citations, reranks with a local cross-encoder, clusters the
+selected papers and has Claude write the synthesis. The topic page has
+**Overview**, **Map** (clustered citation graph), **Timeline**, **Reading path**
+and **Papers** tabs; any paper can be logged into your entries in one click.
+
+Stages: plan, expand, collect, embed, prerank, citations, enrich, rerank, graph,
+cluster, fulltext, extract, diff, synthesize, finalize. Progress is persisted, so
+a search interrupted by a restart can be resumed from the topic page. **Refresh**
+re-runs a topic incrementally from its last completed search (only newer work);
+**Full re-run** starts over.
+
+| Depth | Queries | Pool cap | Citation hops | Papers selected | Full texts read | Window |
+| --- | --- | --- | --- | --- | --- | --- |
+| Quick | 4 | 120 | 0 | 15 | 0 | last 4 years |
+| Standard | 8 | 350 | 1 | 40 | 4 | last 6 years |
+| Deep | 12 | 900 | 2 | 100 | 10 | all time |
+
+The depth picker shows a cost/time estimate before you start. Deeper searches
+make many more Semantic Scholar calls, which are heavily rate-limited without a key.
+
+### Environment
+
+| Variable | |
+| --- | --- |
+| `ANTHROPIC_API_KEY` | Required. Query expansion and extraction use Claude Haiku; synthesis uses Claude Sonnet. |
+| `SEMANTIC_SCHOLAR_API_KEY` | Optional but **strongly recommended**. Without it the shared public rate limit makes Standard/Deep searches slow and prone to 429 back-off. [Request one](https://www.semanticscholar.org/product/api#api-key-form). |
+| `OPENALEX_MAILTO` | Optional. Your email, sent to OpenAlex to join its faster "polite pool". |
+| `LANDSCAPE_RERANK_MODEL` | Optional. transformers.js cross-encoder id (default `Xenova/ms-marco-MiniLM-L-6-v2`). The relevance thresholds are calibrated for the default. |
+| `LANDSCAPE_MAX_SEARCHES_PER_HOUR` | Optional soft spend cap (default `20`). Creating a topic or starting a refresh / full re-run beyond this many searches in the past hour returns 429. Resumes and document retries don't count. |
+
+### First run
+
+The first search downloads two local models into the transformers.js cache: the
+~90MB MiniLM embedding model (shared with entry ingest) and the ~90MB
+`ms-marco-MiniLM-L-6-v2` reranker. If the reranker fails to load, ranking falls
+back to embedding similarity. After that both run offline.
+
+### Smoke test
+
+`scripts/landscape-smoke.ts` runs the whole pipeline end to end against the real
+APIs from the terminal (it spends real API credit). It refuses to touch the
+default database, so point it at a scratch file:
+
+```bash
+DATABASE_PATH=/tmp/smoke.db npm run landscape:smoke -- "sparse autoencoders" quick
+DATABASE_PATH=/tmp/smoke.db npm run landscape:smoke -- "sparse autoencoders" --refresh
+DATABASE_PATH=/tmp/smoke.db npm run landscape:smoke -- --resume <searchId>
+```
+
+## API security
+
+The app has no login: it trusts whoever can reach the port, so keep it bound to
+localhost. To stop other websites open in your browser from driving it (for
+example a hidden form that starts paid searches or replace-imports an empty
+backup), `src/proxy.ts` rejects every mutating `/api/**` request (POST, PUT,
+PATCH, DELETE) with a 403 unless it is same-origin: `Sec-Fetch-Site` must be
+`same-origin` or `none`, or, failing that, `Origin` must exactly match the
+server's own origin (`localhost` and `127.0.0.1` count as different origins).
+Requests with neither header, such as `curl` and scripts, are allowed. JSON
+endpoints also require `Content-Type: application/json` (415 otherwise);
+`/api/import` accepts `multipart/form-data` or `application/json`.
+
 ## Backup and restore
 
 The vectors are the expensive part: losing them means re-embedding everything.
@@ -130,6 +197,7 @@ npm run db:reembed
 | `npm run db:backup` | Online snapshot to `./backups/`, pruned to 10 |
 | `npm run db:reembed` | Backfill embeddings for entries that have none |
 | `npm run db:scrub` | Strip stray markup from stored entries (local, no API calls) |
+| `npm run landscape:smoke` | End-to-end Landscape run against the real APIs (see above) |
 
 ## Roadmap
 

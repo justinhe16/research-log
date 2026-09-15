@@ -27,7 +27,3 @@ export function withFixture(href: string, mode: FixtureMode | null): string {
   const value = mode === "done" ? "1" : mode;
   return `${href}${href.includes("?") ? "&" : "?"}fixture=${value}`;
 }
-
-export function fixtureDelay<T>(value: T, ms = 350): Promise<T> {
-  return new Promise((resolve) => setTimeout(() => resolve(value), ms));
-}

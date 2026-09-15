@@ -12,7 +12,6 @@ export class SearchCancelledError extends Error {
     this.name = "SearchCancelledError";
   }
 }
-export { SearchCancelledError as CancelledError };
 
 export function isCancelledError(err: unknown): boolean {
   return err instanceof SearchCancelledError;

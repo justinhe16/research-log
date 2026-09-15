@@ -44,11 +44,6 @@ export function shortDate(paper: Pick<PaperLite, "publishedAt" | "year">): strin
   return paper.year ? String(paper.year) : "—";
 }
 
-export function formatPercent(value: number | null | undefined): string {
-  if (value === null || value === undefined || !Number.isFinite(value)) return "—";
-  return `${Math.round(value * 100)}`;
-}
-
 export const SEARCH_KIND_LABELS: Record<SearchKind, string> = {
   initial: "First search",
   refresh: "Refresh",

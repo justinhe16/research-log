@@ -119,7 +119,7 @@ describe("expand", () => {
 describe("collect", () => {
   it("pools and dedupes both sources with query hits and best source rank", async () => {
     const id = seedSearch(db, { queries: [q("sparse autoencoders"), q("dictionary learning")], since: "2020-09-15" });
-    const searchArxiv = vi.fn(async (query: unknown, _opts?: unknown) => {
+    const searchArxiv = vi.fn(async (...[query]: [query: unknown, opts?: unknown]) => {
       const text = (query as ExpandedQuery).text;
       return text === "sparse autoencoders"
         ? [arxivPaper("2401.00001", "Towards Monosemanticity With Sparse Autoencoders", 1), arxivPaper("2401.00002", "Scaling Sparse Autoencoders To Big Models", 2)]

@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { entries } from "@/lib/db/schema";
 import { runIngest } from "@/lib/ingest";
 import { toEntry } from "@/lib/serialize";
+import { isJsonContentType } from "@/lib/same-origin";
 
 export const runtime = "nodejs";
 
@@ -31,6 +32,10 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
+    if (!isJsonContentType(request.headers.get("content-type"))) {
+      return fail("Content-Type must be application/json.", 415);
+    }
+
     let body: unknown;
     try {
       body = await request.json();

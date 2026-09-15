@@ -135,7 +135,7 @@ describe("enrich", () => {
     const id = seedSearch(db, { kind: "refresh", queries, baseSearchId: null });
     seedPoolPaper(db, id, { id: "p1", title: "Paper one on sparse autoencoders", arxivId: "2401.00001", citationCount: 3 }, { rrf: 0.5 });
     seedPoolPaper(db, id, { id: "p2", title: "Paper two on sparse autoencoders", doi: "10.1234/two" }, { rrf: 0.4 });
-    const s2BatchPapers = vi.fn(async (ids: string[], _f?: unknown, _o?: unknown) =>
+    const s2BatchPapers = vi.fn(async (...[ids]: [ids: string[], fields?: unknown, opts?: unknown]) =>
       ids.map((x) => (x === "ARXIV:2401.00001" ? s2Paper("S2P1", "Paper one on sparse autoencoders", { arxivId: "2401.00001", citationCount: 2, influentialCitationCount: 1 }) : null)),
     );
     const openAlexWorksByDoi = vi.fn(async () =>
