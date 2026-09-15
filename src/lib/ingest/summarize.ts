@@ -1,8 +1,12 @@
-import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
 import { CATEGORIES, CONTENT_TYPES, SUMMARY_MODEL } from "@/lib/constants";
+import { getClient } from "@/lib/llm/client";
+import { keywords, nullableText, prose, toStringArray } from "@/lib/llm/coerce";
 import { cleanMultiline, cleanText } from "@/lib/sanitize";
 import type { ExtractedContent } from "./extract";
+
+// Re-exported: these moved to src/lib/llm/coerce.ts and are shared with Landscape.
+export { nullableText, toStringArray };
 
 export type Extraction = {
   title: string;
@@ -21,50 +25,6 @@ const MAX_PROMPT_CHARS = 30_000;
 const TOOL_NAME = "record_analysis";
 const MAX_KEY_CLAIMS = 8;
 const MAX_TAGS = 15;
-
-/** The model is told to return arrays, and usually does -- but it intermittently
- *  serializes them as a JSON string ('["a","b"]') or a delimited string instead.
- *  Rejecting that outright fails an otherwise perfectly good analysis, so coerce.
- *
- *  `commaSplit` is off for prose: claim sentences legitimately contain commas, so
- *  those only ever split on line/bullet boundaries. */
-export function toStringArray(value: unknown, commaSplit: boolean): unknown {
-  if (Array.isArray(value)) return value;
-  if (typeof value !== "string") return value;
-
-  const raw = value.trim();
-  if (!raw) return [];
-
-  if (raw.startsWith("[")) {
-    try {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) return parsed;
-    } catch {
-      // Not valid JSON after all -- fall through to delimiter splitting.
-    }
-  }
-
-  const lines = raw.split(/\r?\n+/).map((l) => l.trim()).filter(Boolean);
-  const parts = lines.length > 1 || !commaSplit ? lines : raw.split(/[,;]+/);
-
-  return parts
-    .map((part) => part.replace(/^\s*(?:[-*\u2022]|\d+[.)])\s*/, "").trim())
-    .filter(Boolean);
-}
-
-const prose = (v: unknown) => toStringArray(v, false);
-const keywords = (v: unknown) => toStringArray(v, true);
-
-/** The model sometimes fills an optional field with the *string* "null" (or
- *  "none"/"n/a") instead of omitting it. Persisting that means every consumer
- *  has to defend against it, so normalize to a real null at the boundary. */
-const NOT_A_VALUE = new Set(["null", "undefined", "none", "n/a", "na", "unknown", "-", ""]);
-
-function nullableText(value: string | null | undefined): string | null {
-  if (typeof value !== "string") return null;
-  const trimmed = value.trim();
-  return NOT_A_VALUE.has(trimmed.toLowerCase()) ? null : trimmed;
-}
 
 const extractionSchema = z.object({
   title: z.string().min(1),
@@ -124,21 +84,6 @@ Rules:
 - Never invent authors, venues, dates, or results that are not supported by the text.
 Always answer by calling the ${TOOL_NAME} tool.`;
 
-function apiKey(): string {
-  const key = process.env.ANTHROPIC_API_KEY?.trim();
-  if (!key) {
-    throw new Error(
-      "ANTHROPIC_API_KEY is not set. Add a real key to .env.local (get one at https://console.anthropic.com/settings/keys) and restart the dev server.",
-    );
-  }
-  if (key === "sk-ant-..." || /^sk-ant-\.{3,}$/.test(key) || /^(your|placeholder|changeme)/i.test(key)) {
-    throw new Error(
-      "ANTHROPIC_API_KEY is still the placeholder value. Replace it in .env.local with a real key from https://console.anthropic.com/settings/keys and restart the dev server.",
-    );
-  }
-  return key;
-}
-
 function buildUserMessage(content: ExtractedContent): string {
   const known = [
     `URL: ${content.url}`,
@@ -169,7 +114,7 @@ Record your analysis with the ${TOOL_NAME} tool.`;
 
 /** Ask Claude for a structured analysis of extracted content. */
 export async function summarize(content: ExtractedContent): Promise<Extraction> {
-  const client = new Anthropic({ apiKey: apiKey() });
+  const client = getClient();
 
   const res = await client.messages.create({
     model: SUMMARY_MODEL,

@@ -1,17 +1,21 @@
 import type { CreateEntryInput, Entry, RelatedEntry, UpdateEntryInput } from "@/lib/types";
 
-/** Thrown for any non-2xx response; `message` is the server's `{ error }` string when present. */
+/** Thrown for any non-2xx response; `message` is the server's `{ error }` string when present.
+ *  `payload` is the parsed error body, for responses that carry more than a message
+ *  (e.g. the 409 from creating a Landscape topic lists the similar topics). */
 export class ApiError extends Error {
   readonly status: number;
+  readonly payload: unknown;
 
-  constructor(message: string, status: number) {
+  constructor(message: string, status: number, payload?: unknown) {
     super(message);
     this.name = "ApiError";
     this.status = status;
+    this.payload = payload;
   }
 }
 
-async function request<T>(url: string, init?: RequestInit): Promise<T> {
+export async function request<T>(url: string, init?: RequestInit): Promise<T> {
   let res: Response;
   try {
     res = await fetch(url, {
@@ -37,7 +41,7 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
       payload && typeof payload === "object" && typeof (payload as { error?: unknown }).error === "string"
         ? (payload as { error: string }).error
         : `Request failed (${res.status})`;
-    throw new ApiError(message, res.status);
+    throw new ApiError(message, res.status, payload);
   }
 
   return payload as T;

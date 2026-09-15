@@ -43,3 +43,5 @@ export const entries = sqliteTable(
 
 export type EntryRow = typeof entries.$inferSelect;
 export type NewEntryRow = typeof entries.$inferInsert;
+
+export * from "./schema-landscape";

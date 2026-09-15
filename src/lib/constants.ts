@@ -24,3 +24,5 @@ export const SUMMARY_MODEL = "claude-haiku-4-5-20251001";
 /** Local sentence-transformer used for similarity vectors. */
 export const EMBEDDING_MODEL = "Xenova/all-MiniLM-L6-v2";
 export const EMBEDDING_DIM = 384;
+/** Landscape synthesis model (3-5 calls per search over a cached dossier). */
+export const SYNTHESIS_MODEL = "claude-sonnet-5";
