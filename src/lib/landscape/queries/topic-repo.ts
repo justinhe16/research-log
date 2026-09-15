@@ -1,13 +1,12 @@
 import { and, desc, eq, inArray, or, sql } from "drizzle-orm";
-import type { SQLiteColumn } from "drizzle-orm/sqlite-core";
 import type { Db } from "@/lib/db/create";
-import { searchDocuments, searchPapers, searches, topics, type SearchRow, type TopicRow } from "@/lib/db/schema";
+import { searchDocuments, searches, topics, type TopicRow } from "@/lib/db/schema";
 import { toBuffer } from "@/lib/embedding";
 import { uniqueSlug } from "../slug";
 import { topicEmbeddingText, type EmbedFn } from "../topic-dedupe";
+import { isoKey, summaryColumns, toDepth, toSearchSummary } from "./searches";
 import {
   ACTIVE_SEARCH_STATUSES,
-  DEPTHS,
   type Depth,
   type SearchSummary,
   type TopicCard,
@@ -17,63 +16,6 @@ import {
 // ---------------------------------------------------------------------------
 // Mapping
 // ---------------------------------------------------------------------------
-
-/**
- * Sort key for timestamp columns. This code always writes ISO strings
- * ("2026-02-01T01:00:00.000Z"), but rows inserted elsewhere (imports, raw SQL,
- * the column default) may carry SQLite's "2026-02-01 01:00:00". A space sorts
- * before "T", so normalize to compare the two formats correctly.
- */
-function isoKey(...cols: SQLiteColumn[]) {
-  return sql`replace(coalesce(${sql.join(cols, sql`, `)}, ''), ' ', 'T')`;
-}
-
-function toDepth(value: string): Depth {
-  return (DEPTHS as readonly string[]).includes(value) ? (value as Depth) : "standard";
-}
-
-/** Selected papers per search, as a correlated subquery. */
-const selectedCount = sql<number>`(
-  select count(*) from ${searchPapers}
-  where ${searchPapers.searchId} = ${searches.id} and ${searchPapers.selected} = 1
-)`.mapWith(Number);
-
-const summaryColumns = {
-  id: searches.id,
-  topicId: searches.topicId,
-  kind: searches.kind,
-  depth: searches.depth,
-  status: searches.status,
-  stage: searches.stage,
-  progress: searches.progress,
-  costUsd: searches.costUsd,
-  createdAt: searches.createdAt,
-  startedAt: searches.startedAt,
-  finishedAt: searches.finishedAt,
-  paperCount: selectedCount,
-};
-
-type SummaryRow = Pick<
-  SearchRow,
-  "id" | "topicId" | "kind" | "depth" | "status" | "stage" | "progress" | "costUsd" | "createdAt" | "startedAt" | "finishedAt"
-> & { paperCount: number };
-
-function toSearchSummary(r: SummaryRow): SearchSummary {
-  return {
-    id: r.id,
-    topicId: r.topicId,
-    kind: r.kind,
-    depth: toDepth(r.depth),
-    status: r.status,
-    stage: r.stage ?? null,
-    progress: r.progress,
-    paperCount: r.paperCount ?? 0,
-    costUsd: r.costUsd,
-    createdAt: r.createdAt,
-    startedAt: r.startedAt,
-    finishedAt: r.finishedAt,
-  };
-}
 
 function toCard(t: TopicRow, lastSearch: SearchSummary | null, activeSearch: SearchSummary | null): TopicCard {
   return {

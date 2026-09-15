@@ -27,7 +27,12 @@ export function similarTopicsFrom(err: unknown): SimilarTopic[] | null {
   return Array.isArray(payload?.similar) ? payload.similar : null;
 }
 
+export type LandscapeConfig = { hasS2Key: boolean };
+
 export const landscapeApi = {
+  /** Server facts for UI hints (e.g. "No Semantic Scholar key" in the depth picker). */
+  getConfig: () => request<LandscapeConfig>(`${BASE}/config`),
+
   listTopics: () => request<{ topics: TopicCard[] }>(`${BASE}/topics`).then((r) => r.topics),
 
   similarTopics: (input: SimilarTopicsInput) =>

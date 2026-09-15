@@ -84,9 +84,10 @@ export function influenceScores(rows: InfluenceRow[]): Map<string, number> {
 export type GameChangerRow = Pick<InfluenceRow, "id" | "citationCount" | "velocity" | "pagerank">;
 
 /**
- * Game-changer candidates: among papers with citations >= the pool median (nulls
- * count as 0), the top `count` by 0.5 * pagerank percentile + 0.5 * velocity
- * percentile (percentiles over the whole pool). Ties break by id. Returns ids.
+ * Game-changer candidates: among `rows` with citations >= the median of `rows`
+ * (nulls count as 0), the top `count` by 0.5 * pagerank percentile + 0.5 *
+ * velocity percentile (percentiles over all of `rows`; the graph stage passes
+ * only selected papers). Ties break by id. Returns ids.
  */
 export function gameChangerCandidates(
   rows: GameChangerRow[],

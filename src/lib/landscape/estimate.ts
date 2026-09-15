@@ -139,7 +139,9 @@ export function estimate(depthOrConfig: Depth | DepthConfig, opts: EstimateOptio
     seconds += (config.citations.seeds + config.citations.hop2Seeds) * 2 * s2Request;
   }
   const enrichBatches =
-    Math.ceil(config.poolCap / S2_BATCH) + Math.ceil((config.rerankTopN * S2_AUTHOR_IDS_PER_PAPER) / S2_BATCH);
+    // enrich covers the top rerankTopN × 1.5 by RRF, not the whole pool.
+    Math.ceil(Math.min(config.poolCap, Math.ceil(config.rerankTopN * 1.5)) / S2_BATCH) +
+    Math.ceil((config.rerankTopN * S2_AUTHOR_IDS_PER_PAPER) / S2_BATCH);
   seconds += enrichBatches * s2Request;
   seconds += MODEL_LOAD_S + config.rerankTopN * RERANK_S_PER_PAIR;
   seconds += LOCAL_ML_S;

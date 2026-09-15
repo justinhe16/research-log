@@ -1,13 +1,10 @@
-// Contract types: SearchProgress from "@/lib/landscape/types".
-// Stub (Phase A): implemented in Phase C.
+import { db } from "@/lib/db";
+import { toSearchProgress } from "@/lib/landscape/pipeline/progress";
+import { fail } from "../../_lib/http";
 
 export const runtime = "nodejs";
 
 type Ctx = { params: Promise<{ searchId: string }> };
-
-function notImplemented() {
-  return Response.json({ error: "not implemented" }, { status: 501 });
-}
 
 /**
  * GET /api/landscape/searches/[searchId]
@@ -15,6 +12,13 @@ function notImplemented() {
  * Responds: 200 { search: SearchProgress } | 404
  */
 export async function GET(_request: Request, { params }: Ctx) {
-  await params;
-  return notImplemented();
+  try {
+    const { searchId } = await params;
+    const search = toSearchProgress(db, searchId);
+    if (!search) return fail("Search not found.", 404);
+    return Response.json({ search });
+  } catch (err) {
+    console.error("[GET /api/landscape/searches/:id]", err);
+    return fail("Could not load the search.", 500);
+  }
 }
