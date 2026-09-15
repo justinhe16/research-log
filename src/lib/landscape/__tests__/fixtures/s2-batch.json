@@ -1,0 +1,35 @@
+[
+  {
+    "paperId": "204e3073870fae3d05bcbc2f6a8e263d9b72e776",
+    "externalIds": { "DBLP": "conf/nips/VaswaniSPUJGKP17", "MAG": "2963403868", "ArXiv": "1706.03762v7", "DOI": "10.48550/arXiv.1706.03762", "CorpusId": 13756489 },
+    "title": "Attention is All you Need",
+    "abstract": "The dominant sequence transduction models are based on complex recurrent or convolutional neural networks.",
+    "venue": "Neural Information Processing Systems",
+    "year": 2017,
+    "publicationDate": "2017-06-12",
+    "citationCount": 120000,
+    "influentialCitationCount": 15000,
+    "referenceCount": 41,
+    "openAccessPdf": { "url": "", "status": null },
+    "authors": [
+      { "authorId": "40348417", "name": "Ashish Vaswani", "hIndex": 30 },
+      { "authorId": "1846258", "name": "Noam M. Shazeer", "hIndex": 45 }
+    ]
+  },
+  null,
+  {
+    "paperId": "df2b0e26d0599ce3e70df8a9da02e51594e0e992",
+    "externalIds": { "DOI": "https://doi.org/10.18653/V1/N19-1423", "CorpusId": 52967399 },
+    "title": "BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding",
+    "abstract": "We introduce a new language representation model called BERT.",
+    "venue": "",
+    "publicationVenue": { "name": "North American Chapter of the Association for Computational Linguistics" },
+    "year": 2019,
+    "publicationDate": null,
+    "citationCount": 90000,
+    "influentialCitationCount": 20000,
+    "referenceCount": 60,
+    "openAccessPdf": { "url": "https://aclanthology.org/N19-1423.pdf", "status": "HYBRID" },
+    "authors": [{ "authorId": "39172707", "name": "Jacob Devlin" }]
+  }
+]

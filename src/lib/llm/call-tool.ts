@@ -12,6 +12,10 @@ export type CallToolOptions<S extends z.ZodType> = {
   messages: Anthropic.MessageParam[];
   /** The one tool the model is forced to call. */
   tool: Anthropic.Tool;
+  /** Full tool list to send, in a fixed order; must include `tool`. Tool definitions
+   *  are the start of the cache prefix, so calls meant to share a cached prompt must
+   *  send identical lists. Defaults to `[tool]`. */
+  tools?: Anthropic.Tool[];
   /** Validates (and coerces) `tool_use.input`. */
   schema: S;
   maxTokens: number;
@@ -94,13 +98,17 @@ export async function callTool<S extends z.ZodType>(
   };
 
   try {
+    const tools = opts.tools ?? [opts.tool];
+    if (!tools.some((t) => t.name === opts.tool.name)) {
+      throw new Error(`callTool: tools must include ${opts.tool.name}.`);
+    }
     const res = await getClient().messages.create(
       {
         model: opts.model,
         max_tokens: opts.maxTokens,
         system: opts.system,
         messages: opts.messages,
-        tools: [opts.tool],
+        tools,
         tool_choice: { type: "tool", name: opts.tool.name },
         ...(needsThinkingDisabled(opts.model) ? { thinking: { type: "disabled" as const } } : {}),
       },

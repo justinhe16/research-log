@@ -67,6 +67,21 @@ describe("callTool", () => {
     await expect(callTool({ ...base, model: "claude-sonnet-5" })).rejects.toThrow(/truncated/);
   });
 
+  it("sends the full tools list while forcing the named tool", async () => {
+    const other = { name: "record_y", description: "y", input_schema: { type: "object" as const, properties: {} } };
+    create.mockResolvedValue(response({ label: "ok" }));
+    await callTool({ ...base, model: "claude-sonnet-5", tools: [tool, other] });
+    const params = create.mock.calls[0][0];
+    expect(params.tools).toEqual([tool, other]);
+    expect(params.tool_choice).toEqual({ type: "tool", name: "record_x" });
+  });
+
+  it("throws when the forced tool is not in tools", async () => {
+    const other = { name: "record_y", description: "y", input_schema: { type: "object" as const, properties: {} } };
+    await expect(callTool({ ...base, model: "claude-sonnet-5", tools: [other] })).rejects.toThrow(/record_x/);
+    expect(create).not.toHaveBeenCalled();
+  });
+
   it("detects models that need thinking disabled", () => {
     expect(needsThinkingDisabled("claude-sonnet-5")).toBe(true);
     expect(needsThinkingDisabled("claude-opus-5")).toBe(true);

@@ -1,0 +1,101 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`buildDossier > is deterministic regardless of input order (snapshot) 1`] = `
+"# Landscape dossier: Sparse autoencoders for interpretability
+Topic description: Dictionary learning on LLM activations.
+Generated: 2026-09-15 · 8 papers · 4 clusters
+Card legend: cites = total citations (infl = influential citations); vel = citations per year; pr = PageRank within this set (0-1); influence = composite percentile (0-1); h = max author h-index; built-on-by = papers in this set that build on it.
+
+## Clusters
+C0 "cluster-0" · 1 papers · 2018-2024 · terms: sparse, autoencoder, term0
+  members: P1
+C1 "cluster-1" · 2 papers · 2018-2024 · terms: sparse, autoencoder, term1
+  members: P2, P6
+C2 "cluster-2" · 2 papers · 2018-2024 · terms: sparse, autoencoder, term2
+  members: P3, P7
+C3 "cluster-3" · 2 papers · 2018-2024 · terms: sparse, autoencoder, term3
+  members: P8, P4
+
+## Game-changer candidates (from citation metrics, highest influence first)
+P4 (2021-04) cites 997 (infl 47) · vel 117.5/y · pr 0.97 · influence 0.11 · h 23 · built-on-by 1
+P1 (2018-01) cites 1000 (infl 50) · vel 120.5/y · pr 1.00 · influence 0.00 · h 20 · built-on-by 4
+
+## Builds-on edges (paper -> the earlier papers it builds on)
+P2 -> P1
+P6 -> P5
+P3 -> P1, P2
+P7 -> P1, P6
+P8 -> P7
+P4 -> P3
+P5 -> P1, P4
+
+## Papers (grouped by cluster, oldest first)
+
+[P1] Sparse method number 0 for interpretability (2018-01) · NeurIPS · C0 · foundational
+cites 1000 (infl 50) · vel 120.5/y · pr 1.00 · influence 0.00 · h 20 · built-on-by 4
+problem: Problem 0: features are entangled.
+method: Trains a sparse autoencoder variant 0.
+results: Recovers 0% more features on toy models.
+contribution: First to scale variant 0.
+limitations: Only small models.
+data: OpenWebText, The Pile, SAEBench
+
+[P2] Sparse method number 1 for interpretability (2019-02) · C1
+cites 999 (infl 49) · vel 119.5/y · pr 0.99 · influence 0.37 · h 21 · built-on-by 1
+problem: Problem 1: features are entangled.
+method: Trains a sparse autoencoder variant 1.
+results: Recovers 1% more features on toy models.
+contribution: First to scale variant 1.
+limitations: Only small models.
+data: OpenWebText, The Pile, SAEBench
+
+[P6] Sparse method number 5 for interpretability (2023-06) · C1
+cites 995 (infl 45) · vel 115.5/y · pr 0.95 · influence 0.85 · h 25 · built-on-by 1
+abstract: Abstract of paper 5.
+
+[P3] Sparse method number 2 for interpretability (2020-03) · C2
+cites 998 (infl 48) · vel 118.5/y · pr 0.98 · influence 0.74 · h 22 · built-on-by 1
+problem: Problem 2: features are entangled.
+method: Trains a sparse autoencoder variant 2.
+results: Recovers 2% more features on toy models.
+contribution: First to scale variant 2.
+limitations: Only small models.
+data: OpenWebText, The Pile, SAEBench
+
+[P7] Sparse method number 6 for interpretability (2024-07) · NeurIPS · C2
+cites 994 (infl 44) · vel 114.5/y · pr 0.94 · influence 0.22 · h 26 · built-on-by 1
+problem: Problem 6: features are entangled.
+method: Trains a sparse autoencoder variant 6.
+results: Recovers 6% more features on toy models.
+contribution: First to scale variant 6.
+limitations: Only small models.
+data: OpenWebText, The Pile, SAEBench
+
+[P8] Sparse method number 7 for interpretability (2018-08) · C3
+cites 993 (infl 43) · vel 113.5/y · pr 0.93 · influence 0.59 · h 27 · built-on-by 0
+problem: Problem 7: features are entangled.
+method: Trains a sparse autoencoder variant 7.
+results: Recovers 7% more features on toy models.
+contribution: First to scale variant 7.
+limitations: Only small models.
+data: OpenWebText, The Pile, SAEBench
+
+[P4] Sparse method number 3 for interpretability (2021-04) · NeurIPS · C3
+cites 997 (infl 47) · vel 117.5/y · pr 0.97 · influence 0.11 · h 23 · built-on-by 1
+problem: Problem 3: features are entangled.
+method: Trains a sparse autoencoder variant 3.
+results: Recovers 3% more features on toy models.
+contribution: First to scale variant 3.
+limitations: Only small models.
+data: OpenWebText, The Pile, SAEBench
+
+[P5] Sparse method number 4 for interpretability (2022-05) · unclustered
+cites 996 (infl 46) · vel 116.5/y · pr 0.96 · influence 0.48 · h 24 · built-on-by 1
+problem: Problem 4: features are entangled.
+method: Trains a sparse autoencoder variant 4.
+results: Recovers 4% more features on toy models.
+contribution: First to scale variant 4.
+limitations: Only small models.
+data: OpenWebText, The Pile, SAEBench
+"
+`;

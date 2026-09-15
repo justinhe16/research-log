@@ -154,6 +154,8 @@ export const PAGERANK_ITERATIONS = 50;
 export const GAME_CHANGER_CANDIDATES = 8;
 /** `similar` edges: per-paper top-k neighbours above this cosine. */
 export const SIMILAR_EDGE_MIN_COSINE = 0.6;
+/** A citation is promoted to `builds_on` when influential or the pair's cosine is at least this. */
+export const BUILDS_ON_MIN_COSINE = 0.6;
 export const SIMILAR_EDGE_TOP_K = 3;
 
 /** Clusters smaller than this are merged into their nearest neighbour. */

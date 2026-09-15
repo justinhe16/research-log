@@ -7,7 +7,7 @@ const MAX_EMBED_CHARS = 2000;
 // `pipeline` returns a loosely-typed callable; we only care about the one call
 // shape we use, so describe it narrowly instead of importing the library types.
 type FeatureExtractor = (
-  text: string,
+  text: string | string[],
   opts: { pooling: "mean"; normalize: boolean },
 ) => Promise<{ data: Float32Array | number[]; dims?: number[] }>;
 
@@ -53,6 +53,47 @@ export async function embed(text: string): Promise<Float32Array> {
   const output = await extractor(input, { pooling: "mean", normalize: true });
   const data = output.data;
   return data instanceof Float32Array ? data : Float32Array.from(data);
+}
+
+export type EmbedManyOptions = {
+  batchSize?: number;
+  /** Called after each batch with the number of texts embedded so far. */
+  onProgress?: (done: number, total: number) => void;
+};
+
+/** Embed many texts in batches through the same cached pipeline as `embed`.
+ *  Yields to the event loop between batches so a long run doesn't starve
+ *  request handling. Empty (after trimming) texts are rejected, like `embed`. */
+export async function embedMany(
+  texts: readonly string[],
+  { batchSize = 32, onProgress }: EmbedManyOptions = {},
+): Promise<Float32Array[]> {
+  const inputs = texts.map((t, i) => {
+    const input = (t ?? "").replace(/\s+/g, " ").trim().slice(0, MAX_EMBED_CHARS);
+    if (!input) throw new Error(`embedMany(): refusing to embed empty text at index ${i}`);
+    return input;
+  });
+  if (inputs.length === 0) return [];
+
+  const size = Math.max(1, Math.floor(batchSize));
+  const extractor = await getExtractor();
+  const out: Float32Array[] = [];
+  for (let start = 0; start < inputs.length; start += size) {
+    const batch = inputs.slice(start, start + size);
+    const output = await extractor(batch, { pooling: "mean", normalize: true });
+    const data = output.data;
+    const dim = output.dims?.[output.dims.length - 1] ?? data.length / batch.length;
+    if (!Number.isInteger(dim) || dim * batch.length !== data.length) {
+      throw new Error(`embedMany(): unexpected output shape for a batch of ${batch.length}`);
+    }
+    for (let j = 0; j < batch.length; j++) {
+      // Copy so each vector owns its memory rather than viewing the batch tensor.
+      out.push(Float32Array.from(data.slice(j * dim, (j + 1) * dim)));
+    }
+    onProgress?.(out.length, inputs.length);
+    if (start + size < inputs.length) await new Promise<void>((r) => setImmediate(r));
+  }
+  return out;
 }
 
 /** Cosine similarity. Vectors from `embed` are already unit-normalized, so this

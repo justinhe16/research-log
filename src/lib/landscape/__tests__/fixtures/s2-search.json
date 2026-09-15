@@ -1,0 +1,39 @@
+{
+  "total": 3,
+  "offset": 0,
+  "next": 2,
+  "data": [
+    {
+      "paperId": "e3ce36b9deb47aa6bb2aa19c4bfa71283b505025",
+      "externalIds": { "ArXiv": "2309.08600", "DBLP": "journals/corr/abs-2309-08600", "CorpusId": 261934663 },
+      "title": "Sparse Autoencoders Find Highly Interpretable Features in Language Models",
+      "abstract": "One of the roadblocks to a better understanding of neural networks' internals is polysemanticity.",
+      "venue": "International Conference on Learning Representations",
+      "year": 2023,
+      "publicationDate": "2023-09-15",
+      "citationCount": 412,
+      "influentialCitationCount": 71,
+      "referenceCount": 58,
+      "openAccessPdf": { "url": "https://arxiv.org/pdf/2309.08600", "status": "GREEN" },
+      "authors": [
+        { "authorId": "2241404574", "name": "Hoagy Cunningham" },
+        { "authorId": "2073406233", "name": "Aidan Ewart" },
+        { "authorId": null, "name": "Logan Riggs" }
+      ]
+    },
+    {
+      "paperId": "abc123noids",
+      "externalIds": null,
+      "title": "  Towards Monosemanticity:\n Decomposing Language Models With Dictionary Learning ",
+      "abstract": null,
+      "venue": "",
+      "year": null,
+      "publicationDate": "2023-10-04",
+      "citationCount": 250,
+      "influentialCitationCount": null,
+      "referenceCount": 0,
+      "openAccessPdf": null,
+      "authors": []
+    }
+  ]
+}

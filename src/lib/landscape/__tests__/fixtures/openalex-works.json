@@ -1,0 +1,57 @@
+{
+  "meta": { "count": 2, "db_response_time_ms": 12, "page": 1, "per_page": 50 },
+  "results": [
+    {
+      "id": "https://openalex.org/W2963341956",
+      "doi": "https://doi.org/10.18653/v1/n19-1423",
+      "title": "BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding",
+      "display_name": "BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding",
+      "publication_year": 2019,
+      "publication_date": "2019-01-01",
+      "ids": { "openalex": "https://openalex.org/W2963341956", "doi": "https://doi.org/10.18653/v1/n19-1423", "mag": "2963341956" },
+      "primary_location": {
+        "is_oa": true,
+        "landing_page_url": "https://doi.org/10.18653/v1/n19-1423",
+        "pdf_url": null,
+        "source": null,
+        "raw_source_name": "Proceedings of the 2019 Conference of the North American Chapter of the Association for Computational Linguistics"
+      },
+      "best_oa_location": { "is_oa": true, "landing_page_url": "https://doi.org/10.18653/v1/n19-1423", "pdf_url": "https://aclanthology.org/N19-1423.pdf", "source": null },
+      "locations": [
+        { "landing_page_url": "https://doi.org/10.18653/v1/n19-1423", "pdf_url": null, "source": null },
+        { "landing_page_url": "https://arxiv.org/abs/1810.04805", "pdf_url": "https://arxiv.org/pdf/1810.04805", "source": { "display_name": "arXiv (Cornell University)" } }
+      ],
+      "cited_by_count": 33623,
+      "authorships": [
+        { "author_position": "first", "author": { "id": "https://openalex.org/A5057457287", "display_name": "Jacob Devlin", "orcid": null }, "raw_author_name": "Jacob Devlin" },
+        { "author_position": "middle", "author": { "id": "https://openalex.org/A5023888391", "display_name": "Ming-Wei Chang" }, "raw_author_name": "Ming-Wei Chang" },
+        { "author_position": "last", "author": { "id": null, "display_name": null }, "raw_author_name": "Kristina Toutanova" }
+      ],
+      "abstract_inverted_index": {
+        "We": [0],
+        "introduce": [1],
+        "a": [2, 5],
+        "new": [3],
+        "language": [4],
+        "model": [6],
+        "called": [7],
+        "BERT.": [8]
+      }
+    },
+    {
+      "id": "https://openalex.org/W1234567890",
+      "doi": null,
+      "title": null,
+      "display_name": "Deep Residual Learning for Image Recognition",
+      "publication_year": 2016,
+      "publication_date": "2016-06-01",
+      "ids": { "openalex": "https://openalex.org/W1234567890" },
+      "primary_location": { "landing_page_url": "https://ieeexplore.ieee.org/document/7780459", "pdf_url": null, "source": { "display_name": "Computer Vision and Pattern Recognition" } },
+      "best_oa_location": null,
+      "locations": [],
+      "cited_by_count": 200000,
+      "authorships": [{ "author": { "id": "https://openalex.org/A5100000001", "display_name": "Kaiming He" } }],
+      "abstract_inverted_index": null
+    }
+  ]
+}

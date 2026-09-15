@@ -1,0 +1,47 @@
+{
+  "offset": 0,
+  "next": 3,
+  "data": [
+    {
+      "isInfluential": true,
+      "intents": ["methodology"],
+      "citedPaper": {
+        "paperId": "204e3073870fae3d05bcbc2f6a8e263d9b72e776",
+        "externalIds": { "ArXiv": "1706.03762" },
+        "title": "Attention is All you Need",
+        "abstract": null,
+        "venue": "Neural Information Processing Systems",
+        "year": 2017,
+        "publicationDate": "2017-06-12",
+        "citationCount": 120000,
+        "influentialCitationCount": 15000,
+        "referenceCount": 41,
+        "openAccessPdf": null,
+        "authors": [{ "authorId": "40348417", "name": "Ashish Vaswani" }]
+      }
+    },
+    {
+      "isInfluential": false,
+      "intents": [],
+      "citedPaper": { "paperId": null, "externalIds": null, "title": "Some unresolved workshop paper", "authors": [] }
+    },
+    {
+      "isInfluential": false,
+      "intents": null,
+      "citedPaper": {
+        "paperId": "6b85b63579a916f705a8e10a49bd8d849d91b1fc",
+        "externalIds": { "DOI": "10.1162/neco.1997.9.8.1735" },
+        "title": "Long Short-Term Memory",
+        "abstract": "Learning to store information over extended time intervals by recurrent backpropagation takes a very long time.",
+        "venue": "Neural Computation",
+        "year": 1997,
+        "publicationDate": "1997-11-01",
+        "citationCount": 80000,
+        "influentialCitationCount": 9000,
+        "referenceCount": 30,
+        "openAccessPdf": null,
+        "authors": [{ "authorId": "3308557", "name": "Sepp Hochreiter" }]
+      }
+    }
+  ]
+}
