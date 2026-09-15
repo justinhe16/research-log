@@ -278,11 +278,15 @@ export function eraBands(
   domain: [number, number],
   x: (t: number) => number,
 ): EraBand[] {
-  return [...eras]
-    .sort((a, b) => a.startYear - b.startYear)
-    .map((era) => {
+  const sorted = [...eras].sort((a, b) => a.startYear - b.startYear);
+  return sorted
+    .map((era, i) => {
       const start = Math.max(domain[0], era.startYear);
-      const end = Math.min(domain[1], era.endYear === null ? domain[1] : era.endYear + 1);
+      // Eras often share a boundary year ("2023–2024" then "2024–now"). Stop each band
+      // where the next begins so bands (and their labels) never draw over each other.
+      const next = sorted[i + 1];
+      const ownEnd = era.endYear === null ? domain[1] : era.endYear + 1;
+      const end = Math.min(domain[1], ownEnd, next && next.startYear > era.startYear ? next.startYear : Infinity);
       const x0 = x(start);
       const x1 = x(Math.max(start, end));
       return {

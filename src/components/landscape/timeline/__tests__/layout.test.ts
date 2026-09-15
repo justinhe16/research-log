@@ -5,6 +5,7 @@ import type { ClusterDTO, PaperLite } from "@/lib/landscape/types";
 import {
   assignLanes,
   computeTimelineLayout,
+  eraBands,
   fitLabel,
   LAYOUT,
   packLane,
@@ -209,5 +210,28 @@ describe("fitLabel", () => {
     expect(fitLabel("Scaling and open suites", 400)).toBe("Scaling and open suites");
     expect(fitLabel("Scaling and open suites", 61)).toMatch(/…$/);
     expect(fitLabel("Scaling", 12)).toBe("");
+  });
+});
+
+describe("eraBands", () => {
+  const x = (t: number) => (t - 2018) * 100;
+  const era = (label: string, startYear: number, endYear: number | null) => ({ label, startYear, endYear, summary: "", keyPaperIds: [] });
+
+  it("stops a band where the next era starts, so bands sharing a boundary year never overlap", () => {
+    const bands = eraBands(
+      [era("Scaling, evaluation rigor, and domain transfer", 2024, null), era("Sparse coding", 2018, 2022), era("SAEs resolve superposition in language models", 2023, 2024)],
+      [2018, 2027],
+      x,
+    );
+    expect(bands.map((b) => b.label)).toEqual(["Sparse coding", "SAEs resolve superposition in language models", "Scaling, evaluation rigor, and domain transfer"]);
+    for (let i = 1; i < bands.length; i++) expect(bands[i - 1].x1).toBeLessThanOrEqual(bands[i].x0);
+    // The label is fitted to the visible (clipped) width: one year = 100px.
+    expect(bands[1].x1 - bands[1].x0).toBe(100);
+    expect(bands[1].shortLabel).toMatch(/…$/);
+  });
+
+  it("keeps an era's own end when it finishes before the next begins", () => {
+    const bands = eraBands([era("A", 2018, 2019), era("B", 2022, null)], [2018, 2027], x);
+    expect(bands[0].x1).toBe(x(2020));
   });
 });
