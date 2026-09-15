@@ -13,7 +13,8 @@
     "db:reembed": "tsx scripts/reembed.ts",
     "test": "vitest run",
     "test:watch": "vitest",
-    "db:scrub": "tsx scripts/scrub-markup.ts"
+    "db:scrub": "tsx scripts/scrub-markup.ts",
+    "landscape:smoke": "tsx scripts/landscape-smoke.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.125.0",

@@ -71,7 +71,10 @@ export async function clusterStage(ctx: StageContext, deps: StructureDeps): Prom
   const res = chooseK(
     withEmb.map((x) => x.v),
     [min, max],
-    hashSeed(ctx.searchId),
+    // Seeded per topic, not per search: k-means on a loose selection is seed-sensitive, and a
+    // refresh with an unchanged selection must reproduce the base partition, or the diff
+    // reports spurious grew/shrank clusters (seen in the smoke refresh).
+    hashSeed(ctx.topicId),
   );
   ctx.throwIfCancelled();
   ctx.setStageProgress(0.6);

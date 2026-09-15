@@ -121,8 +121,28 @@ describe("collect", () => {
     const failing = stagesFor(db, {
       searchArxiv: async () => Promise.reject(new Error("down")),
       searchS2: async () => Promise.reject(new Error("down")),
+      searchOpenAlex: async () => Promise.reject(new Error("down")),
     });
     await expect(failing.collect(makeCtx(db, id2, "collect"))).rejects.toThrow(/every source failed/);
+  });
+
+  it("falls back to OpenAlex when arXiv and S2 both fail, and stops calling a source after repeated failures", async () => {
+    const id = seedSearch(db, { queries: [q("aa"), q("bb"), q("cc")], since: "2022-09-15" });
+    const searchArxiv = vi.fn(async () => Promise.reject(new Error("HTTP 429")));
+    const searchS2 = vi.fn(async () => Promise.reject(new Error("HTTP 429")));
+    const searchOpenAlex = vi.fn(async (text: string) => [
+      { title: `OpenAlex paper about ${text} features`, doi: `10.1/${text}`, openalexId: `W${text.length}${text}`, authors: [], source: "openalex" as const },
+    ]);
+    const ctx = makeCtx(db, id, "collect");
+    await stagesFor(db, { searchArxiv, searchS2, searchOpenAlex } as never).collect(ctx);
+
+    expect(pool(db, id)).toHaveLength(3);
+    expect(searchOpenAlex).toHaveBeenCalledTimes(3);
+    expect((searchOpenAlex.mock.calls[0] as unknown[])[1]).toMatchObject({ since: "2022-09-15" });
+    // Tripped after 2 consecutive failures: the third query skips both primaries.
+    expect(searchArxiv).toHaveBeenCalledTimes(2);
+    expect(searchS2).toHaveBeenCalledTimes(2);
+    expect(ctx.warnings.some((w) => /failed 2 queries in a row/.test(w))).toBe(true);
   });
 
   it("caps the pool round-robin across queries", async () => {

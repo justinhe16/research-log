@@ -111,12 +111,18 @@ type RunOpts<S extends z.ZodType, D> = SynthesisCallOptions & {
 };
 
 /**
- * One synthesis call with ref mapping. Retries once when the answer fails
- * validation or cites too many unknown refs (> MAX_INVALID_REF_RATE).
+ * One synthesis call with ref mapping. Retries (up to SYNTHESIS_ATTEMPTS in total)
+ * when the answer fails validation or cites too many unknown refs
+ * (> MAX_INVALID_REF_RATE). Smoke runs showed Sonnet 5 (thinking disabled) malforming
+ * large forced tool inputs roughly a third of the time -- e.g. leaking the parameter
+ * XML into the first string field -- so one retry was not enough. Retries read the
+ * dossier cache, so each costs mostly output tokens.
  */
+export const SYNTHESIS_ATTEMPTS = 3;
+
 export async function runSynthesisCall<S extends z.ZodType, D>(opts: RunOpts<S, D>): Promise<D> {
   let lastError: unknown;
-  for (let attempt = 0; attempt < 2; attempt++) {
+  for (let attempt = 0; attempt < SYNTHESIS_ATTEMPTS; attempt++) {
     if (opts.signal?.aborted) throw opts.signal.reason ?? new Error("aborted");
     try {
       const res = await callTool({

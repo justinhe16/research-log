@@ -64,6 +64,33 @@ export function formatIssues(error: z.ZodError): string {
     .join("; ");
 }
 
+/**
+ * Validate tool input, salvaging one known malformation: with thinking disabled,
+ * Sonnet 5 intermittently JSON-encodes the *entire* input object into the first
+ * property (e.g. `{"clusters": "{\"topicSummary\": ..., \"clusters\": [...]}"}`).
+ * If the raw input fails validation, try each string property that parses to an
+ * object, merged over the other properties.
+ */
+export function parseToolInput<S extends z.ZodType>(schema: S, input: unknown): z.ZodSafeParseResult<z.output<S>> {
+  const first = schema.safeParse(input);
+  if (first.success || !input || typeof input !== "object" || Array.isArray(input)) return first;
+  for (const [key, value] of Object.entries(input as Record<string, unknown>)) {
+    if (typeof value !== "string" || !value.trim().startsWith("{")) continue;
+    let inner: unknown;
+    try {
+      inner = JSON.parse(value);
+    } catch {
+      continue;
+    }
+    if (!inner || typeof inner !== "object" || Array.isArray(inner)) continue;
+    const rest = { ...(input as Record<string, unknown>) };
+    delete rest[key];
+    const retry = schema.safeParse({ ...rest, ...(inner as Record<string, unknown>) });
+    if (retry.success) return retry;
+  }
+  return first;
+}
+
 const EMPTY_USAGE: LlmUsage = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 };
 
 /**
@@ -129,7 +156,7 @@ export async function callTool<S extends z.ZodType>(
       );
     }
 
-    const parsed = opts.schema.safeParse(block.input);
+    const parsed = parseToolInput(opts.schema, block.input);
     if (!parsed.success) {
       throw new LlmOutputError(
         `${opts.tool.name} returned input that failed validation -- ${formatIssues(parsed.error)}`,

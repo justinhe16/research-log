@@ -87,3 +87,39 @@ describe("snapshot fixture", () => {
     }
   });
 });
+
+describe("real Sonnet 5 malformations (smoke run regressions)", () => {
+  const narrative = {
+    eras: [{ label: "SAE proof of concept", startYear: 2023, endYear: null, summary: "s", keyRefs: ["P10"] }],
+    gameChangers: [{ ref: "P10", why: "w", evidence: "1560 citations" }],
+    outlook: "o",
+    whatChanged: null,
+    readingPath: [{ ref: "P10", phase: "foundations", reason: "r" }],
+  };
+
+  it("accepts frontier sent as prose and lifts its inline refs", () => {
+    const parsed = narrativePathInputSchema.parse({
+      ...narrative,
+      frontier: "Fixes for non-identifiability (P12's iSAE, P5's Ordered SAEs) and matching pursuit (P4, P12).",
+    });
+    expect(parsed.frontier.refs).toEqual(["P12", "P5", "P4"]);
+    expect(parsed.frontier.summary).toMatch(/^Fixes for/);
+  });
+
+  it("still accepts frontier as an object or a JSON string", () => {
+    expect(narrativePathInputSchema.parse({ ...narrative, frontier: { summary: "x", refs: ["P1"] } }).frontier.refs).toEqual(["P1"]);
+    expect(narrativePathInputSchema.parse({ ...narrative, frontier: '{"summary":"x","refs":["P2"]}' }).frontier.refs).toEqual(["P2"]);
+  });
+
+  it("salvages the whole input JSON-encoded into the first property", async () => {
+    const { parseToolInput } = await import("@/lib/llm/call-tool");
+    const whole = { topicSummary: "t", clusters: [{ idx: 0, name: "n", summary: "s", keyIdeas: ["k"], representativeRefs: ["P1"] }] };
+    const raw = { clusters: JSON.stringify(whole) };
+    expect(clustersInputSchema.safeParse(raw).success).toBe(false);
+    const res = parseToolInput(clustersInputSchema, raw);
+    expect(res.success).toBe(true);
+    expect(res.data?.clusters[0].name).toBe("n");
+    // A genuinely broken input still fails with the original issues.
+    expect(parseToolInput(clustersInputSchema, { topicSummary: "t</topicSummary>\n<clusters>..." }).success).toBe(false);
+  });
+});

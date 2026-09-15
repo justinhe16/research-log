@@ -15,7 +15,13 @@ import {
   type Env,
 } from "./shared";
 
-type Hit = { input: PaperInput; rank: number; source: "arxiv" | "s2" };
+type Hit = { input: PaperInput; rank: number; source: "arxiv" | "s2" | "openalex" };
+
+/** A source that fails this many queries in a row (after its own retries) is skipped for the rest of the run. */
+export const SOURCE_TRIP_AFTER = 2;
+
+/** Run-local source health (not checkpointed: a resume gives every source a fresh chance). */
+type SourceHealth = { consecutiveFailures: { arxiv: number; s2: number }; tripped: Set<"arxiv" | "s2"> };
 
 type CollectCheckpoint = {
   doneQueries: number[];
@@ -82,7 +88,26 @@ function recordHits(env: Env, qi: number, best: Map<string, number>): void {
   }
 }
 
-async function collectQuery(env: Env, qi: number, q: ExpandedQuery, since: string | null, cp: CollectCheckpoint): Promise<void> {
+function noteSource(ctx: Env["ctx"], health: SourceHealth, source: "arxiv" | "s2", failed: boolean): void {
+  if (!failed) {
+    health.consecutiveFailures[source] = 0;
+    return;
+  }
+  health.consecutiveFailures[source] += 1;
+  if (health.consecutiveFailures[source] >= SOURCE_TRIP_AFTER && !health.tripped.has(source)) {
+    health.tripped.add(source);
+    warn(ctx, `${source === "arxiv" ? "arXiv" : "Semantic Scholar"} failed ${SOURCE_TRIP_AFTER} queries in a row; skipping it for the remaining queries`);
+  }
+}
+
+async function collectQuery(
+  env: Env,
+  qi: number,
+  q: ExpandedQuery,
+  since: string | null,
+  cp: CollectCheckpoint,
+  health: SourceHealth,
+): Promise<void> {
   const { ctx, deps, db } = env;
   const { config } = ctx;
   const now = deps.now();
@@ -90,7 +115,10 @@ async function collectQuery(env: Env, qi: number, q: ExpandedQuery, since: strin
   let arxivFailed = false;
   let s2Failed = false;
 
-  if (config.arxivPerQuery > 0) {
+  const useArxiv = config.arxivPerQuery > 0 && !health.tripped.has("arxiv");
+  const useS2 = config.s2PerQuery > 0 && !health.tripped.has("s2");
+
+  if (useArxiv) {
     try {
       const res = await deps.searchArxiv(q, {
         maxResults: config.arxivPerQuery,
@@ -108,10 +136,11 @@ async function collectQuery(env: Env, qi: number, q: ExpandedQuery, since: strin
       arxivFailed = true;
       warn(ctx, `arXiv search failed for "${q.text}": ${errMessage(err)}`);
     }
+    noteSource(ctx, health, "arxiv", arxivFailed);
   }
   ctx.throwIfCancelled();
 
-  if (config.s2PerQuery > 0) {
+  if (useS2) {
     try {
       const res = await deps.searchS2(q.text, {
         limit: config.s2PerQuery,
@@ -126,8 +155,33 @@ async function collectQuery(env: Env, qi: number, q: ExpandedQuery, since: strin
       s2Failed = true;
       warn(ctx, `Semantic Scholar search failed for "${q.text}": ${errMessage(err)}`);
     }
+    noteSource(ctx, health, "s2", s2Failed);
   }
   ctx.throwIfCancelled();
+
+  // Neither primary source answered (failed or tripped): fall back to OpenAlex keyword search.
+  const arxivDown = config.arxivPerQuery > 0 && (arxivFailed || !useArxiv);
+  const s2Down = config.s2PerQuery > 0 && (s2Failed || !useS2);
+  const primaryDown =
+    (config.arxivPerQuery === 0 || arxivDown) && (config.s2PerQuery === 0 || s2Down) && (arxivDown || s2Down);
+  let openAlexOk = false;
+  if (primaryDown) {
+    try {
+      const res = await deps.searchOpenAlex(q.text, {
+        limit: Math.max(config.arxivPerQuery, config.s2PerQuery),
+        since,
+        cache: { db },
+        signal: ctx.signal,
+      });
+      res.forEach((p, i) => hits.push({ input: p, rank: i, source: "openalex" }));
+      openAlexOk = true;
+      ctx.log(`collect q${qi}: arXiv and Semantic Scholar unavailable; used OpenAlex (${res.length} results)`);
+    } catch (err) {
+      rethrowIfCancelled(ctx, err);
+      warn(ctx, `OpenAlex fallback search failed for "${q.text}": ${errMessage(err)}`);
+    }
+    ctx.throwIfCancelled();
+  }
 
   // Interleave the two sources by rank (arXiv first on ties).
   hits.sort((a, b) => a.rank - b.rank || (a.source === b.source ? 0 : a.source === "arxiv" ? -1 : 1));
@@ -143,9 +197,9 @@ async function collectQuery(env: Env, qi: number, q: ExpandedQuery, since: strin
 
   const enabledArxiv = config.arxivPerQuery > 0;
   const enabledS2 = config.s2PerQuery > 0;
-  cp.failures.arxiv += arxivFailed ? 1 : 0;
-  cp.failures.s2 += s2Failed ? 1 : 0;
-  if ((arxivFailed || !enabledArxiv) && (s2Failed || !enabledS2)) cp.failures.both += 1;
+  cp.failures.arxiv += arxivDown ? 1 : 0;
+  cp.failures.s2 += s2Down ? 1 : 0;
+  if ((arxivDown || !enabledArxiv) && (s2Down || !enabledS2) && !openAlexOk) cp.failures.both += 1;
   cp.fetched += hits.length;
   cp.lists[String(qi)] = order;
   cp.doneQueries = mergeUnique(cp.doneQueries, [qi]);
@@ -235,11 +289,12 @@ export async function collectStage(env: Env): Promise<void> {
   const since = search.since ?? null;
   const cp = readCheckpoint(ctx.checkpoint);
   const done = new Set(cp.doneQueries);
+  const health: SourceHealth = { consecutiveFailures: { arxiv: 0, s2: 0 }, tripped: new Set() };
 
   for (let qi = 0; qi < queries.length; qi++) {
     ctx.throwIfCancelled();
     if (!done.has(qi)) {
-      await collectQuery(env, qi, queries[qi], since, cp);
+      await collectQuery(env, qi, queries[qi], since, cp, health);
       ctx.updateCounters({ fetched: cp.fetched, candidates: poolCount(env) });
     }
     ctx.setStageProgress((qi + 1) / (queries.length + 1));
@@ -248,8 +303,8 @@ export async function collectStage(env: Env): Promise<void> {
 
   const n = queries.length;
   if (cp.failures.both >= n) throw new Error("collect: every source failed for every query");
-  if (ctx.config.arxivPerQuery > 0 && cp.failures.arxiv >= n) warn(ctx, "arXiv failed for every query; results come from Semantic Scholar only");
-  if (ctx.config.s2PerQuery > 0 && cp.failures.s2 >= n) warn(ctx, "Semantic Scholar failed for every query; results come from arXiv only");
+  if (ctx.config.arxivPerQuery > 0 && cp.failures.arxiv >= n) warn(ctx, "arXiv failed for every query; results come from the other sources only");
+  if (ctx.config.s2PerQuery > 0 && cp.failures.s2 >= n) warn(ctx, "Semantic Scholar failed for every query; results come from the other sources only");
 
   await applyPoolCap(env, cp, n);
   carryOver(env);

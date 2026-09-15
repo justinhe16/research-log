@@ -14,7 +14,7 @@ const MAX_ERAS = 5;
 export const NARRATIVE_GUIDE = `Narrative:
 - eras (2-5, oldest first): how the field's foundations shifted over time. Each era's summary names what the work then was built on and what displaced it, in the style "Sparse coding, toy superposition models and linear probes were the basis in 2022; by 2024 the field moved to SAEs trained on production LLMs." Use the card dates for startYear/endYear (endYear null for the current era). keyRefs: the papers the era rested on.
 - gameChangers (up to ${MAX_GAME_CHANGERS}): papers that shifted the field. Start from the listed candidates; include a non-candidate only if its builds-on in-degree or velocity clearly justifies it. why: what it changed. evidence: cite its actual metrics from the card (citations, influential citations, velocity, pagerank, built-on-by) and what builds on it. Do not pick a paper just because it is old.
-- frontier: 2-4 sentences on the most recent, fastest-moving work (judge recent papers by velocity, not raw citations) and the refs defining it.
+- frontier: an object with summary (2-4 sentences on the most recent, fastest-moving work; judge recent papers by velocity, not raw citations) and refs (the refs defining it).
 - outlook: 2-3 sentences on where the evidence suggests the field is heading next. Hedge only as much as the evidence requires.`;
 
 export function whatChangedGuide(diff: DiffDocument | null | undefined, refMap: SynthesisDossier["refMap"]): string {

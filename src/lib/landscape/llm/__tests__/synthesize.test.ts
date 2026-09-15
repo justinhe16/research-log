@@ -139,7 +139,7 @@ describe("runSynthesis (5 calls)", () => {
     expect(callTool).toHaveBeenCalledTimes(2); // kinds filter: no other calls
   });
 
-  it("gives up after the retry and reports the ref error", async () => {
+  it("gives up after the retries and reports the ref error", async () => {
     callTool.mockImplementation(
       respond({
         record_gaps: (o) => ({ data: o.schema.parse({ gaps: [{ title: "G", description: "d", evidence: "e", evidenceRefs: ["P50", "P51"], directions: [] }] }) }),
@@ -147,7 +147,7 @@ describe("runSynthesis (5 calls)", () => {
     );
     const res = await runSynthesis({ dossier, depthSynthCalls: 5, kinds: ["gaps"] });
     expect(res.errors.gaps).toMatch(/2\/2 refs/);
-    expect(callTool).toHaveBeenCalledTimes(2);
+    expect(callTool).toHaveBeenCalledTimes(3);
   });
 
   it("without clusters, runs the first target alone before the rest in parallel", async () => {

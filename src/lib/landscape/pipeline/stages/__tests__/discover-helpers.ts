@@ -185,6 +185,7 @@ export function fakeDeps(db: Db, overrides: Partial<DiscoverDeps> = {}): Discove
     s2Citations: async () => [],
     s2BatchPapers: async (ids) => ids.map(() => null),
     openAlexWorksByDoi: async () => new Map(),
+    searchOpenAlex: async () => [],
     embedMany: async (texts) => texts.map(fakeVector),
     scorePairs: async (_q, docs) => docs.map((d) => Math.min(1, d.length / 1000)),
     citationLinkLimit: 50,

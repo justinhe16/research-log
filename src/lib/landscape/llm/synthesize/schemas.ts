@@ -52,6 +52,20 @@ const phase = z.preprocess(
   z.enum(READING_PHASES),
 );
 
+/**
+ * frontier is an object, but Sonnet 5 usually sends it as plain prose with the refs
+ * inline ("... P12's iSAE, P5's Ordered SAEs ..."). Keep the prose as the summary and
+ * lift the inline refs, in order of first mention.
+ */
+export function toFrontier(value: unknown): unknown {
+  const v = toObject(value);
+  if (typeof v !== "string") return v;
+  const summary = v.trim();
+  if (!summary) return v;
+  const refs = Array.from(new Set(Array.from(summary.matchAll(/\bP\s*(\d+)\b/g), (m) => `P${Number(m[1])}`)));
+  return { summary, refs };
+}
+
 const paperId = z.string().min(1);
 const paperIds = z.array(paperId);
 
@@ -172,7 +186,7 @@ const narrativeFields = {
       evidence: text,
     }),
   ),
-  frontier: z.preprocess(toObject, z.object({ summary: text, refs: refList })),
+  frontier: z.preprocess(toFrontier, z.object({ summary: text, refs: refList })),
   outlook: text,
   /** Refresh only: what changed since the base search. */
   whatChanged: optionalText,

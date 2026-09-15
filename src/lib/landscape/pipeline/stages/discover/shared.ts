@@ -6,7 +6,7 @@ import { DB_CHUNK_SIZE } from "@/lib/landscape/constants";
 import { expandQueries } from "@/lib/landscape/llm/expand";
 import { scorePairs } from "@/lib/landscape/rank/cross-encoder";
 import { searchArxiv } from "@/lib/landscape/sources/arxiv";
-import { worksByDoi } from "@/lib/landscape/sources/openalex";
+import { searchOpenAlex, worksByDoi } from "@/lib/landscape/sources/openalex";
 import { batchPapers, citations, references, searchS2 } from "@/lib/landscape/sources/semantic-scholar";
 import type { StageContext, StageName } from "@/lib/landscape/types";
 
@@ -31,6 +31,7 @@ export interface DiscoverDeps {
   s2Citations: typeof citations;
   s2BatchPapers: typeof batchPapers;
   openAlexWorksByDoi: typeof worksByDoi;
+  searchOpenAlex: typeof searchOpenAlex;
   embedMany: (texts: readonly string[]) => Promise<Float32Array[]>;
   scorePairs: (query: string, docs: readonly string[]) => Promise<number[]>;
   /** Max references and max citations fetched per seed. */
@@ -50,6 +51,7 @@ export const defaultDiscoverDeps: DiscoverDeps = {
   s2Citations: citations,
   s2BatchPapers: batchPapers,
   openAlexWorksByDoi: worksByDoi,
+  searchOpenAlex,
   embedMany: (texts) => embedMany(texts),
   scorePairs: (query, docs) => scorePairs(query, docs),
   citationLinkLimit: 200,

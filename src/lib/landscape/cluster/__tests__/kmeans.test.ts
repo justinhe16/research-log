@@ -111,3 +111,34 @@ describe("kmeans / chooseK", () => {
     expect(merged.centroids).toHaveLength(3);
   });
 });
+
+describe("chooseK with a singleton outlier (regression: smoke run collapsed to k=1)", () => {
+  it("keeps at least kMin clusters when another k survives merging", () => {
+    // Two nearby blobs (axes 0 and 1 share a common component) plus one far outlier.
+    const rand = mulberry32(3);
+    const vectors: Float32Array[] = [];
+    const truth: number[] = [];
+    for (let c = 0; c < 2; c++) {
+      for (let i = 0; i < 7; i++) {
+        const v = new Float32Array(16);
+        v[15] = 5;
+        v[c] = 1;
+        for (let d = 0; d < 16; d++) v[d] += (rand() - 0.5) * 0.2;
+        vectors.push(v);
+        truth.push(c);
+      }
+    }
+    const outlier = new Float32Array(16);
+    outlier[8] = 1;
+    vectors.push(outlier);
+    truth.push(1);
+
+    const res = chooseK(vectors, [2, 4], 42, { minClusterSize: 3 });
+    expect(res.scores[0].k).toBe(2);
+    expect(res.k).toBeGreaterThanOrEqual(2);
+    expect(res.centroids).toHaveLength(res.k);
+    const sizes = new Map<number, number>();
+    for (const l of res.labels) sizes.set(l, (sizes.get(l) ?? 0) + 1);
+    expect(Math.min(...sizes.values())).toBeGreaterThanOrEqual(3);
+  });
+});

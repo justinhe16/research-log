@@ -233,3 +233,44 @@ export async function authorHIndex(openalexAuthorIds: string[], opts: OpenAlexRe
   }
   return out;
 }
+
+export type SearchOpenAlexOptions = OpenAlexRequestOptions & {
+  /** Max works to return (one page; OpenAlex caps per-page at 200). */
+  limit: number;
+  /** Only works published on/after this "YYYY-MM-DD". */
+  since?: string | null;
+};
+
+export const OPENALEX_PER_PAGE_MAX = 200;
+
+/** Title/abstract search, most relevant first. `,` `|` `:` are filter syntax, so they're dropped from the query. */
+export function openAlexSearchUrl(query: string, opts: Pick<SearchOpenAlexOptions, "limit" | "since" | "mailto">): string | null {
+  const q = query.replace(/[,|:]+/g, " ").replace(/\s+/g, " ").trim();
+  const limit = Math.min(OPENALEX_PER_PAGE_MAX, Math.max(0, Math.floor(opts.limit)));
+  if (!q || limit === 0) return null;
+  const filters = [`title_and_abstract.search:${q}`];
+  if (opts.since && /^\d{4}-\d{2}-\d{2}/.test(opts.since)) filters.push(`from_publication_date:${opts.since.slice(0, 10)}`);
+  const params = new URLSearchParams({ filter: filters.join(","), sort: "relevance_score:desc", "per-page": String(limit) });
+  const mailto = (opts.mailto ?? process.env.OPENALEX_MAILTO ?? "").trim();
+  if (mailto) params.set("mailto", mailto);
+  return `${OPENALEX_API_BASE}/works?${params.toString()}`;
+}
+
+/**
+ * Keyword search over titles and abstracts. Used by collect as a fallback when
+ * arXiv and Semantic Scholar are both unavailable (e.g. rate limited without an S2 key).
+ */
+export async function searchOpenAlex(query: string, opts: SearchOpenAlexOptions): Promise<OpenAlexPaper[]> {
+  const url = openAlexSearchUrl(query, opts);
+  if (!url) return [];
+  const res = await request<OpenAlexList<OpenAlexRawWork>>(url, {
+    ...opts,
+    cache: opts.cache ? { ...opts.cache, ttlMs: opts.cache.ttlMs ?? API_CACHE_TTL_MS.search } : undefined,
+  });
+  const out: OpenAlexPaper[] = [];
+  for (const raw of Array.isArray(res?.results) ? res.results : []) {
+    const p = parseOpenAlexWork(raw);
+    if (p) out.push(p);
+  }
+  return out;
+}

@@ -221,18 +221,24 @@ export function chooseK(
 
   const dist = cosineDistanceMatrix(vectors);
   const scores: { k: number; score: number }[] = [];
-  const runs = new Map<number, KMeansResult>();
+  const candidates: { k: number; score: number; merged: ReturnType<typeof mergeSmallClusters> }[] = [];
   for (let k = lo; k <= hi; k++) {
     const res = kmeans(vectors, k, { ...opts, seed });
-    runs.set(k, res);
-    scores.push({ k, score: silhouetteFromMatrix(res.labels, dist) });
+    const score = silhouetteFromMatrix(res.labels, dist);
+    scores.push({ k, score });
+    const merged = mergeSmallClusters(vectors, res.labels, minSize);
+    // Judge each k by its post-merge labelling: a high pre-merge silhouette that comes
+    // from a singleton outlier collapses to fewer clusters once the outlier is merged.
+    candidates.push({ k, merged, score: merged.k === res.k ? score : merged.k >= 2 ? silhouetteFromMatrix(merged.labels, dist) : -Infinity });
   }
   if (scores.length === 0) throw new Error(`chooseK: no candidate k in [${lo}, ${hi}]`);
-  const bestScore = Math.max(...scores.map((s) => s.score));
-  const chosen = scores.find((s) => s.score >= bestScore - SILHOUETTE_TOLERANCE)!;
-  const run = runs.get(chosen.k)!;
+  // Prefer runs that still honour the lower bound after merging; otherwise take what we can get.
+  const viable = candidates.filter((c) => c.merged.k >= lo);
+  const pool = viable.length ? viable : candidates;
+  const bestScore = Math.max(...pool.map((c) => c.score));
+  const chosen = pool.find((c) => c.score >= bestScore - SILHOUETTE_TOLERANCE)!;
+  const merged = chosen.merged;
 
-  const merged = mergeSmallClusters(vectors, run.labels, minSize);
   const units = vectors.map(normalize);
   let inertia = 0;
   for (let i = 0; i < n; i++) inertia += Math.max(0, 1 - dot(units[i], merged.centroids[merged.labels[i]]));
@@ -241,7 +247,7 @@ export function chooseK(
     labels: merged.labels,
     centroids: merged.centroids,
     inertia,
-    silhouette: merged.k === run.k ? chosen.score : silhouetteFromMatrix(merged.labels, dist),
+    silhouette: Number.isFinite(chosen.score) ? chosen.score : 0,
     scores,
   };
 }

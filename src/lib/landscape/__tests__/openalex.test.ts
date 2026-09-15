@@ -121,3 +121,16 @@ describe("authorHIndex", () => {
     expect([...out]).toEqual([["A5003442464", 46]]);
   });
 });
+
+describe("openAlexSearchUrl", () => {
+  it("builds a title/abstract relevance search with a date filter and strips filter syntax", async () => {
+    const { openAlexSearchUrl } = await import("../sources/openalex");
+    const url = new URL(openAlexSearchUrl("sparse autoencoders, features|circuits: LLMs", { limit: 30, since: "2022-09-15", mailto: "" })!);
+    expect(url.searchParams.get("filter")).toBe(
+      "title_and_abstract.search:sparse autoencoders features circuits LLMs,from_publication_date:2022-09-15",
+    );
+    expect(url.searchParams.get("sort")).toBe("relevance_score:desc");
+    expect(url.searchParams.get("per-page")).toBe("30");
+    expect(openAlexSearchUrl("  ", { limit: 10 })).toBeNull();
+  });
+});
