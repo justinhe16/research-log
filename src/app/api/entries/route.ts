@@ -94,6 +94,7 @@ export async function POST(request: Request) {
               authors: seed.authors,
               publishedAt: seed.publishedAt,
               venue: seed.venue,
+              // Seeds come only from Landscape's "Log this paper" (see runIngest).
               contentType: "paper",
             }
           : {}),

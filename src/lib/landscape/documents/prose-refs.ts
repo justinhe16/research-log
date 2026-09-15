@@ -93,11 +93,16 @@ export function buildProseRefContext(input: {
 // Text rewrite
 // ---------------------------------------------------------------------------
 
-type Token = { start: number; end: number; kind: "P" | "C"; n: number; upper: boolean };
+type Token = { start: number; end: number; kind: "P" | "C"; n: number; clusterWord: boolean };
 
-/** Paper refs any case ("p12"); cluster refs "C0" (upper-case only; "C4 dataset" is a
- *  dataset) or "cluster-0". */
-const TOKEN_RE = /\b(?:([Pp])(\d+)|C(\d+)(?!\s+(?:dataset|corpus|benchmark)s?\b)|[Cc]luster-(\d+))\b/g;
+/*
+ * Ref tokens: "P12" (upper-case only), "C0", "cluster-0". A token directly followed by
+ * a word character, ".<digit>", "x" or "-<letter>" is part of something else ("P3.16",
+ * "p3.16xlarge", "C4-based"), except "-P3"/"-C3" which is a range. A hardware or data
+ * noun after it ("P3 GPUs", "C4 dataset") also disqualifies it.
+ */
+const TOKEN_RE =
+  /(?<![\w.])(?:P(\d+)|C(\d+)|[Cc]luster-(\d+))(?!\w|\.\d|-(?![PC]\d)[A-Za-z])(?!\s+(?:GPUs?|instances?|nodes?|datasets?|corpus|corpora|benchmarks?)\b)/g;
 /** Text allowed between two refs of one run. */
 const SEP_RE = /^\s*(?:,\s*(?:and\s+|&\s*)?|;|\/|&|and\s+|[-–—])?\s*$/i;
 const RANGE_RE = /^\s*[-–—]\s*$/;
@@ -113,9 +118,7 @@ function capitalizeLead(s: string): string {
   return s.replace(/^([\s,;:]*)([a-z])/, (_m, pre: string, c: string) => `${pre}${c.toUpperCase()}`);
 }
 
-/** Rewrite the refs in one prose string. Returns the input unchanged when nothing applies. */
-export function rewriteProseRefs(text: string, ctx: ProseRefContext): string {
-  if (!text || (ctx.papers.size === 0 && ctx.clusters.size === 0)) return text;
+function tokenize(text: string): Token[] {
   const tokens: Token[] = [];
   for (const m of text.matchAll(TOKEN_RE)) {
     const isP = m[1] != null;
@@ -123,12 +126,50 @@ export function rewriteProseRefs(text: string, ctx: ProseRefContext): string {
       start: m.index!,
       end: m.index! + m[0].length,
       kind: isP ? "P" : "C",
-      n: Number(isP ? m[2] : (m[3] ?? m[4])),
-      upper: isP ? m[1] === "P" : true,
+      n: Number(isP ? m[1] : (m[2] ?? m[3])),
+      clusterWord: m[3] != null,
     });
   }
-  if (tokens.length === 0) return text;
+  return tokens;
+}
 
+/** Known ref tokens across every string in `value` (a document, a list, a string). */
+export function countKnownRefs(value: unknown, ctx: ProseRefContext): number {
+  if (typeof value === "string") {
+    return tokenize(value).filter((t) => (t.kind === "P" ? ctx.papers.has(t.n) : ctx.clusters.has(t.n))).length;
+  }
+  if (Array.isArray(value)) return value.reduce((n: number, v) => n + countKnownRefs(v, ctx), 0);
+  if (value && typeof value === "object") return Object.values(value).reduce((n: number, v) => n + countKnownRefs(v, ctx), 0);
+  return 0;
+}
+
+/** Is `start..end` enclosed by an open "(" / "[" that closes after it? */
+function insideBrackets(text: string, start: number, end: number): boolean {
+  const before = text.slice(0, start);
+  const open = Math.max(before.lastIndexOf("("), before.lastIndexOf("["));
+  if (open < 0 || open < Math.max(before.lastIndexOf(")"), before.lastIndexOf("]"))) return false;
+  const after = text.slice(end);
+  const close = after.search(/[)\]]/);
+  const reopen = after.search(/[([]/);
+  return close >= 0 && (reopen < 0 || close < reopen);
+}
+
+/**
+ * Rewrite the refs in one prose string. Returns the input unchanged when nothing
+ * applies. A run of refs is rewritten only where it is unambiguous: inside
+ * parentheses/brackets, a list or range of refs, or (paper refs) when the same
+ * field has another known paper ref, or a possessive ("P12's"); a cluster ref also
+ * after "cluster", before "'s", or written "cluster-0". Either kind also when the
+ * surrounding document has another known ref (`opts.documentKnownRefs`, from
+ * `countKnownRefs` over the whole document, >= 2 counting this one): synthesis
+ * documents are written from refs, so a lone "P5" there is a ref. Otherwise an
+ * isolated "P100" or "C4" in plain prose is left alone. Idempotent: labels never
+ * contain ref tokens that qualify again.
+ */
+export function rewriteProseRefs(text: string, ctx: ProseRefContext, opts: { documentKnownRefs?: number } = {}): string {
+  if (!text || (ctx.papers.size === 0 && ctx.clusters.size === 0)) return text;
+  const tokens = tokenize(text);
+  if (tokens.length === 0) return text;
   const known = (t: Token) => (t.kind === "P" ? ctx.papers.has(t.n) : ctx.clusters.has(t.n));
   const labelOf = (kind: "P" | "C", n: number) => (kind === "P" ? ctx.papers.get(n) : ctx.clusters.get(n));
 
@@ -139,6 +180,18 @@ export function rewriteProseRefs(text: string, ctx: ProseRefContext): string {
     if (g && SEP_RE.test(text.slice(g[g.length - 1].end, t.start))) g.push(t);
     else groups.push([t]);
   }
+
+  const eligible = (g: Token[]): boolean => {
+    const start = g[0].start;
+    const end = g[g.length - 1].end;
+    if (g.length > 1 || insideBrackets(text, start, end)) return true;
+    const t = g[0];
+    if ((opts.documentKnownRefs ?? 0) >= 2) return true;
+    if (t.kind === "C") {
+      return t.clusterWord || /\bcluster\s*$/i.test(text.slice(0, start)) || /^['’]s\b/.test(text.slice(end));
+    }
+    return /^['’]s\b/.test(text.slice(end)) || tokens.some((o) => o !== t && o.kind === "P" && known(o));
+  };
 
   let out = "";
   let cursor = 0;
@@ -156,9 +209,10 @@ export function rewriteProseRefs(text: string, ctx: ProseRefContext): string {
     const after = text.slice(end);
     const opensParen = /[([]\s*$/.test(before);
     const fullParen = opensParen && /^\s*[)\]]/.test(after);
+    if (!eligible(g)) continue;
     const anyKnown = g.some(known);
     // A lone unknown ref in parentheses ("(P99)") is still a ref; elsewhere leave it be.
-    const removable = !anyKnown && fullParen && g.every((t) => t.upper);
+    const removable = !anyKnown && fullParen;
     if (!anyKnown && !removable) continue;
 
     const labels: string[] = [];
@@ -187,6 +241,10 @@ export function rewriteProseRefs(text: string, ctx: ProseRefContext): string {
   if (!changed) return text;
   append(text.slice(cursor));
 
+  // Tidy-up runs over the whole field, not just around the replacements: offsets
+  // shift as refs are replaced, and the patterns only match debris a removal leaves
+  // (empty brackets, doubled separators, space before punctuation), which clean
+  // prose doesn't contain. It never runs when no ref was rewritten.
   return out
     .replace(/[ \t]*[([]\s*[,;]?\s*[)\]]/g, "") // empty "()" / "[]"
     .replace(/([([])\s*[,;]\s*/g, "$1")
@@ -216,7 +274,8 @@ type DocByKind = {
 
 /** Rewrite every prose field of a stored document (ids, names and labels untouched). */
 export function rewriteDocumentProse<K extends DocumentKind>(kind: K, doc: DocByKind[K], ctx: ProseRefContext): DocByKind[K] {
-  const r = (s: string) => rewriteProseRefs(s, ctx);
+  const documentKnownRefs = countKnownRefs(doc, ctx);
+  const r = (s: string) => rewriteProseRefs(s, ctx, { documentKnownRefs });
   const rn = (s: string | null) => (s == null ? s : r(s));
   const list = (xs: string[]) => xs.map(r).filter((x) => x.trim());
   switch (kind) {

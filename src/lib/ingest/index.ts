@@ -86,6 +86,8 @@ export async function runIngest(entryId: string, { seed }: IngestOptions = {}): 
         org: analysis.org,
         venue: seed?.venue?.trim() || analysis.venue,
         publishedAt: seed?.publishedAt?.trim() || analysis.publishedAt,
+        // Seeds only come from Landscape's "Log this paper", so a seeded entry is always a
+        // paper. If other callers start seeding, add seed.contentType instead of this override.
         contentType: seed ? "paper" : analysis.contentType,
         category,
         embedding: toBuffer(vector),

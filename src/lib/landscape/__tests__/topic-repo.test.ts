@@ -172,11 +172,11 @@ describe("listTopicCards / refreshTopicDenormalized", () => {
     seedSearch("a-new", a.id, "done", { createdAt: "2026-02-01T00:00:00.000Z", finishedAt: "2026-02-01T01:00:00.000Z" });
     seedSelectedPapers("a-new", 1, 0);
     db.insert(searchDocuments)
-      .values({ searchId: "a-new", kind: "clusters", data: { topicSummary: "Led by P1 (P7); a P100 GPU." } })
+      .values({ searchId: "a-new", kind: "clusters", data: { topicSummary: "Led by (P1, P7); a P100 GPU." } })
       .run();
     refreshTopicDenormalized(db, a.id);
     const card = listTopicCards(db).find((c) => c.id === a.id)!;
-    expect(card.summary).toBe("Led by a-new-p0; a P100 GPU.");
+    expect(card.summary).toBe("Led by (a-new-p0); a P100 GPU.");
   });
 
   it("resets denormalized fields when no done search remains", () => {

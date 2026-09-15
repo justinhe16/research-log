@@ -12,7 +12,7 @@ import {
   type PaperExtractionRow,
 } from "@/lib/db/schema";
 import { CLUSTER_COLORS, EXTRACTION_VERSION } from "../constants";
-import { buildProseRefContext, rewriteLandscapeDocumentsProse, rewriteProseRefs, type ProseRefContext } from "../documents/prose-refs";
+import { buildProseRefContext, countKnownRefs, rewriteLandscapeDocumentsProse, rewriteProseRefs, type ProseRefContext } from "../documents/prose-refs";
 import { DOCUMENT_SCHEMAS } from "../llm/synthesize/schemas";
 import { loggedEntryIdFor, loggedIndex } from "../papers/logged";
 import {
@@ -205,8 +205,16 @@ export function loadProseRefContext(
 export function topicCardSummary(db: Db, topic: { summary: string | null; lastSearchId: string | null }): string | null {
   const summary = topic.summary?.trim();
   if (!summary) return null;
-  if (!topic.lastSearchId || !/\b(?:[Pp]|C|[Cc]luster-)\d+\b/.test(summary)) return summary;
-  return rewriteProseRefs(summary, loadProseRefContext(db, topic.lastSearchId)) || null;
+  if (!topic.lastSearchId || !/\b(?:P|C|[Cc]luster-)\d+\b/.test(summary)) return summary;
+  const ctx = loadProseRefContext(db, topic.lastSearchId);
+  // Document-level context: the summary comes from that search's clusters document.
+  const doc = db
+    .select({ data: searchDocuments.data })
+    .from(searchDocuments)
+    .where(and(eq(searchDocuments.searchId, topic.lastSearchId), eq(searchDocuments.kind, "clusters"), eq(searchDocuments.status, "done")))
+    .get();
+  const documentKnownRefs = Math.max(countKnownRefs(doc?.data, ctx), countKnownRefs(summary, ctx));
+  return rewriteProseRefs(summary, ctx, { documentKnownRefs }) || null;
 }
 
 // ---------------------------------------------------------------------------
