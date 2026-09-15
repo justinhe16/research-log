@@ -1,0 +1,68 @@
+/* Theme @xyflow/react with the app's tokens. Scoped to the Landscape map. */
+.landscape-map .react-flow {
+  --xy-background-color: transparent;
+  --xy-background-pattern-dots-color: color-mix(in oklab, var(--foreground) 14%, transparent);
+
+  --xy-controls-button-background-color: var(--popover);
+  --xy-controls-button-background-color-hover: var(--muted);
+  --xy-controls-button-color: var(--muted-foreground);
+  --xy-controls-button-color-hover: var(--foreground);
+  --xy-controls-button-border-color: var(--border);
+  --xy-controls-box-shadow: 0 0 0 1px color-mix(in oklab, var(--foreground) 10%, transparent),
+    0 1px 2px color-mix(in oklab, var(--foreground) 6%, transparent);
+
+  --xy-minimap-background-color: var(--popover);
+  --xy-minimap-mask-background-color: color-mix(in oklab, var(--muted) 72%, transparent);
+  --xy-minimap-mask-stroke-color: color-mix(in oklab, var(--foreground) 22%, transparent);
+  --xy-minimap-node-stroke-color: transparent;
+
+  font-family: var(--font-sans);
+}
+
+.landscape-map .react-flow__controls {
+  border-radius: calc(var(--radius) * 0.9);
+  overflow: hidden;
+}
+.landscape-map .react-flow__controls-button {
+  width: 28px;
+  height: 28px;
+}
+.landscape-map .react-flow__controls-button:last-child {
+  border-bottom: none;
+}
+
+.landscape-map .react-flow__minimap {
+  border-radius: calc(var(--radius) * 0.9);
+  overflow: hidden;
+  box-shadow: 0 0 0 1px color-mix(in oklab, var(--foreground) 10%, transparent);
+}
+.landscape-map .react-flow__minimap-svg {
+  width: 168px;
+  height: 112px;
+}
+
+.landscape-map .react-flow__node {
+  cursor: pointer;
+  outline: none;
+}
+.landscape-map .react-flow__node:focus-visible .paper-node__disc {
+  outline: 2px solid var(--ring);
+  outline-offset: 4px;
+}
+
+
+.landscape-map .react-flow__attribution {
+  background: transparent;
+  padding: 0 4px;
+  margin: 0 0 2px;
+  font-size: 9px;
+  opacity: 0.55;
+}
+.landscape-map .react-flow__attribution a {
+  color: var(--muted-foreground);
+}
+
+/* Cluster halos sit behind edges and nodes. */
+.landscape-map .react-flow__viewport-portal {
+  z-index: -1;
+}

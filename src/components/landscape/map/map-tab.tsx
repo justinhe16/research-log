@@ -1,18 +1,29 @@
+"use client";
+
+import dynamic from "next/dynamic";
 import { WaypointsIcon } from "lucide-react";
 
 import type { LandscapeSnapshot } from "@/lib/landscape/types";
-import { ComingSoon } from "../coming-soon";
+import { StateMessage } from "../state-message";
+import { MapSkeleton } from "./map-skeleton";
 
 export type MapTabProps = {
   snapshot: LandscapeSnapshot;
   onOpenPaper: (paperId: string) => void;
 };
 
-// Placeholder: replaced in Wave D. Keep the props contract.
-export function MapTab({ snapshot }: MapTabProps) {
-  return (
-    <div data-search-id={snapshot.search.id}>
-      <ComingSoon icon={WaypointsIcon} title="Map" body="An interactive citation map, with papers sized by influence and colored by cluster." />
-    </div>
-  );
+// xyflow and d3-force load only when this tab is opened.
+const LandscapeMap = dynamic(() => import("./landscape-map"), { ssr: false, loading: MapSkeleton });
+
+export function MapTab({ snapshot, onOpenPaper }: MapTabProps) {
+  if (snapshot.papers.length === 0) {
+    return (
+      <StateMessage
+        icon={<WaypointsIcon />}
+        title="Nothing to map yet"
+        body="This search has no selected papers. Run a deeper search to collect papers and their citations."
+      />
+    );
+  }
+  return <LandscapeMap snapshot={snapshot} onOpenPaper={onOpenPaper} />;
 }
