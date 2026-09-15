@@ -4,10 +4,10 @@ import { searchStages, searches, topics, type SearchRow, type TopicRow } from "@
 import { embedMany } from "@/lib/embedding";
 import { DB_CHUNK_SIZE } from "@/lib/landscape/constants";
 import { expandQueries } from "@/lib/landscape/llm/expand";
-import { scorePairs } from "@/lib/landscape/rank/cross-encoder";
+import { scorePairsDetailed } from "@/lib/landscape/rank/cross-encoder";
 import { searchArxiv } from "@/lib/landscape/sources/arxiv";
 import { searchOpenAlex, worksByDoi } from "@/lib/landscape/sources/openalex";
-import { batchPapers, citations, references, searchS2 } from "@/lib/landscape/sources/semantic-scholar";
+import { batchPapers, citations, references, searchS2, searchS2ByCitations } from "@/lib/landscape/sources/semantic-scholar";
 import type { StageContext, StageName } from "@/lib/landscape/types";
 
 /*
@@ -27,12 +27,15 @@ export interface DiscoverDeps {
   expandQueries: typeof expandQueries;
   searchArxiv: typeof searchArxiv;
   searchS2: typeof searchS2;
+  /** Canonical recall: most-cited S2 matches (only called with an S2 key). */
+  searchS2ByCitations: typeof searchS2ByCitations;
   s2References: typeof references;
   s2Citations: typeof citations;
   s2BatchPapers: typeof batchPapers;
   openAlexWorksByDoi: typeof worksByDoi;
   searchOpenAlex: typeof searchOpenAlex;
   embedMany: (texts: readonly string[]) => Promise<Float32Array[]>;
+  /** Raw cross-encoder logits per doc, in input order (the rerank stage calibrates them). */
   scorePairs: (query: string, docs: readonly string[]) => Promise<number[]>;
   /** Max references and max citations fetched per seed. */
   citationLinkLimit: number;
@@ -47,13 +50,14 @@ export const defaultDiscoverDeps: DiscoverDeps = {
   expandQueries,
   searchArxiv,
   searchS2,
+  searchS2ByCitations,
   s2References: references,
   s2Citations: citations,
   s2BatchPapers: batchPapers,
   openAlexWorksByDoi: worksByDoi,
   searchOpenAlex,
   embedMany: (texts) => embedMany(texts),
-  scorePairs: (query, docs) => scorePairs(query, docs),
+  scorePairs: async (query, docs) => (await scorePairsDetailed(query, docs)).raw,
   citationLinkLimit: 200,
   embedChunk: 64,
   rerankChunk: 32,

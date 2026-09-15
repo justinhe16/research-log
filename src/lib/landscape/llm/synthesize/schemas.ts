@@ -352,7 +352,7 @@ const narrativeProperties: JsonSchema = {
       properties: {
         ref: { type: "string", pattern: "^P\\d+$", description: "Dossier ref." },
         why: S("One or two sentences on what it changed."),
-        evidence: S("Grounding in the dossier metrics: citations, velocity, influential citations, pagerank, builds_on in-degree."),
+        evidence: S("Grounding in the dossier metrics shown on the card: citations, velocity, influential citations, pagerank (only if shown), builds_on in-degree."),
       },
       required: ["ref", "why", "evidence"],
     },

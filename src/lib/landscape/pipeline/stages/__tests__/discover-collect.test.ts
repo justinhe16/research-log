@@ -1,8 +1,11 @@
 import { eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Db } from "@/lib/db/create";
-import { searchPapers, searches } from "@/lib/db/schema";
+import { searchPapers, searchStages, searches } from "@/lib/db/schema";
+import { and } from "drizzle-orm";
 import type { ExpandedQuery } from "@/lib/landscape/types";
+import { pickCanonical } from "../discover/canonical";
+import { driftedQueries } from "../discover/plan-expand";
 import {
   arxivPaper,
   freshDb,
@@ -73,6 +76,36 @@ describe("expand", () => {
     expect(ctx.warnings[0]).toMatch(/expansion failed/);
   });
 
+  it("drops expanded queries that drift off-topic, with a warning", async () => {
+    const id = seedSearch(db);
+    const expandQueries = vi.fn(async () => ({
+      queries: [q("sparse autoencoders interpretability features"), q("lottery ticket pruning"), q("language models sparse features")],
+      categories: [],
+      mustTerms: [],
+      excludeTerms: [],
+    }));
+    // Topic ~ [1,0]; "lottery" is orthogonal.
+    const embedMany = async (texts: readonly string[]) =>
+      texts.map((t) => (t.includes("lottery") ? Float32Array.from([0, 1]) : Float32Array.from([1, 0.1])));
+    const ctx = makeCtx(db, id, "expand");
+    await stagesFor(db, { expandQueries, embedMany }).expand(ctx);
+    const row = db.select().from(searches).where(eq(searches.id, id)).get()!;
+    expect(row.queries.map((x) => x.text)).toEqual([
+      "sparse autoencoders",
+      "sparse autoencoders interpretability features",
+      "language models sparse features",
+    ]);
+    expect(ctx.warnings.some((w) => /lottery ticket pruning/.test(w))).toBe(true);
+    expect(ctx.counters.queriesDropped).toBe(1);
+  });
+
+  it("driftedQueries drops only clear drift, lowest first, capped at half", () => {
+    expect(driftedQueries([0.8, 0.02, 0.5, 0.1])).toEqual([1, 3]);
+    expect(driftedQueries([0.01, 0.02, 0.03, 0.9])).toEqual([0, 1]);
+    expect(driftedQueries([0.05])).toEqual([]);
+    expect(driftedQueries([Number.NaN, 0.9])).toEqual([0]);
+  });
+
   it("is skipped on refresh", async () => {
     seedSearch(db, { id: "base", status: "done", queries: [q("a b c")] });
     const id = seedSearch(db, { id: "r", kind: "refresh", baseSearchId: "base" });
@@ -130,14 +163,17 @@ describe("collect", () => {
     const id = seedSearch(db, { queries: [q("aa"), q("bb"), q("cc")], since: "2022-09-15" });
     const searchArxiv = vi.fn(async () => Promise.reject(new Error("HTTP 429")));
     const searchS2 = vi.fn(async () => Promise.reject(new Error("HTTP 429")));
-    const searchOpenAlex = vi.fn(async (text: string) => [
-      { title: `OpenAlex paper about ${text} features`, doi: `10.1/${text}`, openalexId: `W${text.length}${text}`, authors: [], source: "openalex" as const },
-    ]);
+    const searchOpenAlex = vi.fn(async (text: string, opts?: { sort?: string }) =>
+      opts?.sort === "citations"
+        ? []
+        : [{ title: `OpenAlex paper about ${text} features`, doi: `10.1/${text}`, openalexId: `W${text.length}${text}`, authors: [], source: "openalex" as const }],
+    );
     const ctx = makeCtx(db, id, "collect");
     await stagesFor(db, { searchArxiv, searchS2, searchOpenAlex } as never).collect(ctx);
 
     expect(pool(db, id)).toHaveLength(3);
-    expect(searchOpenAlex).toHaveBeenCalledTimes(3);
+    // Three fallback searches plus one citation-sorted canonical search.
+    expect(searchOpenAlex.mock.calls.filter((c) => (c[1] as { sort?: string }).sort !== "citations")).toHaveLength(3);
     expect((searchOpenAlex.mock.calls[0] as unknown[])[1]).toMatchObject({ since: "2022-09-15" });
     // Tripped after 2 consecutive failures: the third query skips both primaries.
     expect(searchArxiv).toHaveBeenCalledTimes(2);
@@ -184,5 +220,65 @@ describe("collect", () => {
     ]);
     expect((searchS2.mock.calls[0] as unknown[])[1]).toMatchObject({ since: "2026-03-06" });
     expect(db.select().from(searchPapers).where(eq(searchPapers.paperId, "old2")).all()).toHaveLength(1);
+  });
+
+  it("admits most-cited on-topic works via citation-sorted recall, outside the pool cap", async () => {
+    const id = seedSearch(db, {
+      queries: [q("aa")],
+      config: { poolCap: 1, s2PerQuery: 0, canonical: { perSource: 50, maxAdmitted: 2 } },
+    });
+    const searchArxiv = async () => [arxivPaper("2401.00001", "Paper aa number one long title", 1), arxivPaper("2401.00002", "Paper aa number two long title", 2)];
+    const onTopic = (title: string, citationCount: number, doi: string) => ({
+      title,
+      abstract: "sparse autoencoders interpretability of language models",
+      doi,
+      citationCount,
+      authors: [],
+      source: "openalex" as const,
+    });
+    const searchOpenAlex = vi.fn(async (_text: string, opts?: { sort?: string }) =>
+      opts?.sort === "citations"
+        ? [
+            { title: "Bearing fault diagnosis with stacked autoencoders", abstract: "vibration signals rolling bearings", doi: "10.1/off", citationCount: 5000, authors: [], source: "openalex" as const },
+            onTopic("Sparse autoencoders find interpretable features", 1500, "10.1/a"),
+            onTopic("Gated sparse autoencoders", 200, "10.1/b"),
+            onTopic("A niche sparse autoencoder variant", 3, "10.1/c"),
+          ]
+        : [],
+    );
+    const searchS2ByCitations = vi.fn(async () => []);
+    const ctx = makeCtx(db, id, "collect");
+    ctx.hasS2Key = false;
+    await stagesFor(db, { searchArxiv, searchOpenAlex, searchS2ByCitations } as never).collect(ctx);
+
+    const citationCall = searchOpenAlex.mock.calls.find((c) => (c[1] as { sort?: string }).sort === "citations")!;
+    expect(citationCall[0]).toBe("sparse autoencoders");
+    expect(citationCall[1]).toMatchObject({ since: "2014-01-01", limit: 50 });
+    expect(searchS2ByCitations).not.toHaveBeenCalled();
+    const titles = pool(db, id).map((r) => r.papers.title).sort();
+    expect(titles).toEqual(["Gated sparse autoencoders", "Paper aa number one long title", "Sparse autoencoders find interpretable features"]);
+    expect(ctx.checkpoint?.canonicalIds).toHaveLength(2);
+    expect(ctx.counters.canonicalAdmitted).toBe(2);
+    const admitted = pool(db, id).find((r) => r.papers.title === "Gated sparse autoencoders")!;
+    expect(admitted.papers.embedding).not.toBeNull();
+
+    // A resumed collect keeps canonical rows despite the cap and does not search again.
+    db.update(searchStages)
+      .set({ status: "running" })
+      .where(and(eq(searchStages.searchId, id), eq(searchStages.stage, "collect")))
+      .run();
+    searchOpenAlex.mockClear();
+    await stagesFor(db, { searchArxiv, searchOpenAlex } as never).collect(makeCtx(db, id, "collect"));
+    expect(searchOpenAlex).not.toHaveBeenCalled();
+    expect(pool(db, id)).toHaveLength(3);
+  });
+
+  it("pickCanonical gates on similarity, dedupes titles and sorts by citations", () => {
+    const c = (title: string, citationCount: number | null, similarity: number) => ({ input: { title, citationCount }, similarity });
+    const out = pickCanonical([c("A", 10, 0.9), c("B", 500, 0.2), c("a", 40, 0.6), c("C", null, 0.8), c("D", 30, 0.55)], 2);
+    expect(out.map((x) => [x.input.title, x.input.citationCount])).toEqual([
+      ["a", 40],
+      ["D", 30],
+    ]);
   });
 });

@@ -10,6 +10,7 @@ import {
   references,
   s2YearParam,
   searchS2,
+  searchS2ByCitations,
   type S2FetchJson,
 } from "@/lib/landscape/sources/semantic-scholar";
 
@@ -221,5 +222,27 @@ describe("batchAuthors", () => {
     expect(out.get("40348417")).toEqual({ authorId: "40348417", hIndex: 30, citationCount: 150000 });
     expect(out.get("39172707")).toEqual({ authorId: "39172707", hIndex: 25, citationCount: null });
     expect(out.has("999")).toBe(false);
+  });
+});
+
+describe("searchS2ByCitations", () => {
+  it("uses bulk search sorted by citation count and trims to the limit", async () => {
+    const { calls, fetchJson } = fake(() => ({
+      total: 3,
+      token: "next",
+      data: [
+        { paperId: "a", title: "Towards Monosemanticity", citationCount: 900 },
+        { paperId: "b", title: "Gated SAEs", citationCount: 200 },
+        { paperId: "c", title: "Untitled", citationCount: 1 },
+      ],
+    }));
+    const out = await searchS2ByCitations("sparse autoencoders", { limit: 2, fetchJson, yearRange: { from: 2020 } });
+    expect(out.map((p) => p.s2Id)).toEqual(["a", "b"]);
+    const u = new URL(calls[0].url);
+    expect(u.pathname).toBe("/graph/v1/paper/search/bulk");
+    expect(u.searchParams.get("sort")).toBe("citationCount:desc");
+    expect(u.searchParams.get("year")).toBe("2020-");
+    expect(calls[0].opts.host).toBe("s2");
+    expect(await searchS2ByCitations("  ", { limit: 5, fetchJson })).toEqual([]);
   });
 });

@@ -51,7 +51,7 @@ export async function embedStage(env: Env): Promise<void> {
 }
 
 /** Topic vector: stored one if present, else embedded now (not written back). */
-async function topicVector(env: Env): Promise<Float32Array | null> {
+export async function topicVector(env: Env): Promise<Float32Array | null> {
   const topic = loadTopic(env.db, env.ctx.topicId);
   if (topic.embedding) {
     try {

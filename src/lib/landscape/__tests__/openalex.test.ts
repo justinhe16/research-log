@@ -134,3 +134,43 @@ describe("openAlexSearchUrl", () => {
     expect(openAlexSearchUrl("  ", { limit: 10 })).toBeNull();
   });
 });
+
+describe("searchOpenAlex", () => {
+  it("sorts by citations when asked and OR-relaxes an all-terms query that found nothing", async () => {
+    const { openAlexSearchUrl, searchOpenAlex, openAlexSearchTerms } = await import("../sources/openalex");
+    const cited = new URL(openAlexSearchUrl("sparse autoencoders", { limit: 100, sort: "citations", mailto: "" })!);
+    expect(cited.searchParams.get("sort")).toBe("cited_by_count:desc");
+    expect(openAlexSearchTerms("mechanistic interpretability of the monosemantic features")).toEqual([
+      "mechanistic",
+      "interpretability",
+      "monosemantic",
+      "features",
+    ]);
+
+    const work = { id: "https://openalex.org/W1", title: "Towards Monosemanticity", publication_year: 2023 };
+    const { calls, fetchJson } = fake((u) => ({ results: u.searchParams.get("filter")!.includes(" OR ") ? [work] : [] }));
+    const relaxedInfo: unknown[] = [];
+    const out = await searchOpenAlex("mechanistic interpretability monosemantic", {
+      limit: 20,
+      fetchJson,
+      mailto: "",
+      onRelaxed: (info) => relaxedInfo.push(info),
+    });
+    expect(calls).toHaveLength(2);
+    expect(new URL(calls[1].url).searchParams.get("filter")).toBe(
+      "title_and_abstract.search:(mechanistic OR interpretability OR monosemantic)",
+    );
+    expect(out.map((p) => p.title)).toEqual(["Towards Monosemanticity"]);
+    expect(relaxedInfo).toEqual([{ query: "mechanistic interpretability monosemantic", relaxedResults: 1 }]);
+  });
+
+  it("does not relax single-term queries or queries that found results", async () => {
+    const { searchOpenAlex } = await import("../sources/openalex");
+    const empty = fake(() => ({ results: [] }));
+    await searchOpenAlex("monosemanticity", { limit: 5, fetchJson: empty.fetchJson, mailto: "" });
+    expect(empty.calls).toHaveLength(1);
+    const hit = fake(() => ({ results: [{ id: "W2", title: "A" }] }));
+    await searchOpenAlex("sparse autoencoders", { limit: 5, fetchJson: hit.fetchJson, mailto: "" });
+    expect(hit.calls).toHaveLength(1);
+  });
+});

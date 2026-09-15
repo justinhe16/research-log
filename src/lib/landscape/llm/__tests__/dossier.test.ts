@@ -50,6 +50,20 @@ describe("buildDossier", () => {
     expect((err as Error).message).toMatch(/100 papers .* over the 1000-token budget/);
   });
 
+  it("omits PageRank from cards and the legend when the search has no citation graph", () => {
+    const input = syntheticDossierInput(4);
+    const withPr = buildDossier(input);
+    expect(withPr.text).toMatch(/ · pr \d/);
+    const noGraph = {
+      ...input,
+      papers: input.papers.map((p) => ({ ...p, metrics: { ...p.metrics, pagerank: null } })),
+    };
+    const text = buildDossier(noGraph).text;
+    expect(text).not.toMatch(/\bpr\b/);
+    expect(text).toContain("No citation graph was available");
+    expect(text).toMatch(/cites \d+ \(infl [\d?]+\) · vel [\d.?]+\/y · influence/);
+  });
+
   it("uses only builds_on edges and ignores unknown candidates", () => {
     const d = buildDossier(syntheticDossierInput(4));
     expect(d.text).not.toContain("not-in-set");

@@ -34,7 +34,9 @@ export const DEPTH_PRESETS: Record<Depth, DepthConfig> = {
     citations: { hops: 0, seeds: 0, hop2Seeds: 0, maxAdmitted: 0, minSeedLinks: 2 },
     rerankTopN: 60,
     selectCount: 15,
-    foundationalReserve: 2,
+    foundationalReserve: 4,
+    frontierReserve: 3,
+    canonical: { perSource: 100, maxAdmitted: 15 },
     fulltextCount: 0,
     kRange: { min: 2, max: 4 },
     synthesisCalls: 3,
@@ -49,7 +51,9 @@ export const DEPTH_PRESETS: Record<Depth, DepthConfig> = {
     citations: { hops: 1, seeds: 15, hop2Seeds: 0, maxAdmitted: 100, minSeedLinks: 2 },
     rerankTopN: 150,
     selectCount: 40,
-    foundationalReserve: 6,
+    foundationalReserve: 8,
+    frontierReserve: 6,
+    canonical: { perSource: 150, maxAdmitted: 40 },
     fulltextCount: 4,
     kRange: { min: 3, max: 7 },
     synthesisCalls: 5,
@@ -64,7 +68,9 @@ export const DEPTH_PRESETS: Record<Depth, DepthConfig> = {
     citations: { hops: 2, seeds: 30, hop2Seeds: 10, maxAdmitted: 350, minSeedLinks: 2 },
     rerankTopN: 250,
     selectCount: 100,
-    foundationalReserve: 15,
+    foundationalReserve: 18,
+    frontierReserve: 12,
+    canonical: { perSource: 200, maxAdmitted: 80 },
     fulltextCount: 10,
     kRange: { min: 4, max: 10 },
     synthesisCalls: 5,
@@ -138,6 +144,51 @@ export const RRF_K = 60;
 export const BM25_TITLE_WEIGHT = 2;
 export const BM25_K1 = 1.2;
 export const BM25_B = 0.75;
+
+// --- Relevance calibration & selection (rank/select.ts) ---
+
+/** Stored relevance (search_papers.rerank, 0..1) = sigmoid((logit - CENTER) / TEMPERATURE).
+ *  ms-marco-MiniLM-L-6 logits on a real pool: on-topic abstracts 7.5..9.6, borderline 4..7,
+ *  off-topic < 2. A plain sigmoid saturates at 0.9993-0.9999 for the whole on-topic band, so
+ *  it cannot separate candidates; with center 5 / temperature 2 that band maps to ~0.78..0.91
+ *  and the order is exactly the logit order. Recalibrate if LANDSCAPE_RERANK_MODEL changes. */
+export const RERANK_LOGIT_CENTER = 5;
+export const RERANK_LOGIT_TEMPERATURE = 2;
+/** Cosine fallback (MiniLM bi-encoder): on-topic 0.55..0.75, off-topic < 0.45. */
+export const COSINE_RELEVANCE_CENTER = 0.45;
+export const COSINE_RELEVANCE_TEMPERATURE = 0.08;
+/** Bump when the stored rerank scale changes, so refresh never reuses base scores on another scale. */
+export const RERANK_SCORE_VERSION = 2;
+
+/** Selection score = relevance (dominant) + influence prior. With relevance spread over ~0.13
+ *  inside the on-topic band, a 0.3 prior weight lets a well-cited on-topic paper beat a
+ *  marginally higher-scoring uncited one, while an off-topic classic (relevance < 0.2) still
+ *  loses to any on-topic paper. Sums to 1. */
+export const SELECTION_WEIGHTS = { relevance: 0.7, influence: 0.3 } as const;
+/** Influence prior at rerank time (before the graph stage): within-candidate percentiles of
+ *  log1p(citations) and citation velocity. Sums to 1. */
+export const INFLUENCE_PRIOR_WEIGHTS = { citations: 0.65, velocity: 0.35 } as const;
+/** Reserve (foundational / frontier) candidates need relevance >= this share of the best relevance. */
+export const RESERVE_MIN_RELEVANCE_RATIO = 0.75;
+/** "Recent" for the frontier reserve (and not eligible for the foundational one). */
+export const FRONTIER_MONTHS = 12;
+/** Diversity (MMR-style): redundancy = max(0, maxCosineToSelected - FLOOR) / (1 - FLOOR),
+ *  subtracted with this weight. Same-field papers sit around 0.6-0.7 and are not penalized. */
+export const MMR_SIM_FLOOR = 0.7;
+export const MMR_WEIGHT = 0.15;
+/** At or above this cosine two candidates are treated as the same work (e.g. preprint + journal copy). */
+export const DUPLICATE_COSINE = 0.97;
+
+/** Canonical recall and expansion drift: cosine (MiniLM) to the topic vector. Real pool:
+ *  on-topic papers 0.5..0.75, off-topic keyword matches <= 0.45. */
+export const CANONICAL_MIN_COSINE = 0.5;
+/** Expanded queries below this cosine to the topic are dropped as drift. Short query text is
+ *  noisy under MiniLM: on-topic facets measured 0.2..0.8 ("SAE evaluation benchmarks" 0.22 for
+ *  "sparse autoencoders for interpretability") while real drift ("lottery ticket hypothesis
+ *  pruning") scored 0.02, so only clear drift is cut. */
+export const EXPAND_MIN_COSINE = 0.15;
+/** Never drop more than this share of the expanded queries (acronym topics embed poorly). */
+export const EXPAND_MAX_DROP_SHARE = 0.5;
 
 /** Influence = weighted blend of within-pool percentiles. Sums to 1. */
 export const INFLUENCE_WEIGHTS = {
@@ -213,6 +264,13 @@ export const RATE_LIMITS = {
 export const HTTP_TIMEOUT_MS = 20_000;
 export const HTTP_MAX_RETRIES = 3;
 export const HTTP_BACKOFF_BASE_MS = 1000;
+/** After a 429 the host waits at least this long (or Retry-After, if longer) and its request
+ *  spacing doubles for the rest of the process, up to `max`. Hosts not listed use the plain
+ *  backoff and a 4x cap. */
+export const RATE_LIMIT_PENALTY = {
+  arxiv: { minBackoffMs: 10_000, maxIntervalMs: 10_000 },
+  s2: { minBackoffMs: 5_000, maxIntervalMs: 10_000 },
+} as const;
 /** api_cache TTLs. Search results go stale faster than paper metadata. */
 export const API_CACHE_TTL_MS = {
   search: 24 * 60 * 60 * 1000,

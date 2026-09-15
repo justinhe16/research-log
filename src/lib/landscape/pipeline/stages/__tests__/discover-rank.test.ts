@@ -5,7 +5,7 @@ import { paperCitations, papers, searchPapers, searchStages } from "@/lib/db/sch
 import { toBuffer } from "@/lib/embedding";
 import { CrossEncoderUnavailable } from "@/lib/landscape/rank/cross-encoder";
 import type { S2CitationLink } from "@/lib/landscape/sources/semantic-scholar";
-import { provisionalInfluence } from "../discover/rerank";
+import { cosineRelevance, logitRelevance } from "@/lib/landscape/rank/calibrate";
 import {
   fakeVector,
   freshDb,
@@ -206,8 +206,8 @@ describe("rerank", () => {
     const ctx = makeCtx(db, id, "rerank");
     await stagesFor(db, { scorePairs, rerankChunk: 2 }).rerank(ctx);
     expect(ctx.warnings[0]).toMatch(/cross-encoder unavailable/);
-    expect(row(id, "p0").rerank).toBeCloseTo(1);
-    expect(row(id, "p1").rerank).toBeCloseTo(0.9); // overwritten: no mixed scales
+    expect(row(id, "p0").rerank).toBeCloseTo(cosineRelevance(1));
+    expect(row(id, "p1").rerank).toBeCloseTo(cosineRelevance(0.9)); // overwritten: no mixed scales
     expect(ctx.checkpoint).toMatchObject({ mode: "cosine" });
   });
 
@@ -222,15 +222,46 @@ describe("rerank", () => {
     expect(row(id, "p0").rerank).toBe(0.5);
   });
 
-  it("keeps a foundational reserve using provisional citation influence", async () => {
-    const id = seedSearch(db, { queries, config: { rerankTopN: 6, selectCount: 3, foundationalReserve: 1 } });
-    seedRerankPool(id, 6);
-    const scorePairs = async (_q: string, docs: readonly string[]) => docs.map((d) => 1 - Number(d.match(/Paper (\d)/)![1]) / 10);
-    await stagesFor(db, { scorePairs }).rerank(makeCtx(db, id, "rerank"));
+  it("stores calibrated relevance and lets a cited on-topic classic beat uncited near-ties", async () => {
+    const id = seedSearch(db, { queries, config: { rerankTopN: 6, selectCount: 3, foundationalReserve: 1, frontierReserve: 0 } });
+    // [id, logit, citations, year]
+    const spec: [string, number, number, number][] = [
+      ["n0", 9.6, 0, 2025],
+      ["n1", 9.5, 1, 2025],
+      ["n2", 9.4, 2, 2025],
+      ["n3", 9.3, 0, 2025],
+      ["classic", 8.3, 1500, 2023],
+      ["offtopic", -3, 99_999, 2020],
+    ];
+    spec.forEach(([pid, , cites, year], i) =>
+      seedPoolPaper(db, id, { id: pid, title: `Paper ${pid} about sparse autoencoders`, citationCount: cites, year }, { rrf: 1 - i / 100, cosine: 0.6 }),
+    );
+    const logit = new Map(spec.map(([pid, l]) => [pid, l]));
+    const scorePairs = async (_q: string, docs: readonly string[]) => docs.map((d) => logit.get(d.match(/Paper (\S+)/)![1])!);
+    const ctx = makeCtx(db, id, "rerank");
+    await stagesFor(db, { scorePairs }).rerank(ctx);
+    expect(row(id, "n0").rerank).toBeCloseTo(logitRelevance(9.6));
+    expect(row(id, "n0").rerank! - row(id, "classic").rerank!).toBeGreaterThan(0.05);
     const foundational = pool(db, id).filter((r) => r.search_papers.foundational).map((r) => r.papers.id);
-    expect(foundational).toEqual(["p4"]);
+    expect(foundational).toEqual(["classic"]);
+    expect(row(id, "classic").finalRank).toBe(1);
+    expect(row(id, "offtopic").selected).toBe(false);
+    expect(ctx.checkpoint).toMatchObject({ foundational: 1, frontier: 0 });
+  });
+
+  it("always scores canonical-recall admissions, even outside the prerank top-N", async () => {
+    const id = seedSearch(db, { queries, config: { rerankTopN: 2, selectCount: 2, foundationalReserve: 0 } });
+    seedRerankPool(id, 5);
+    db.update(searchStages)
+      .set({ checkpoint: { canonicalIds: ["p4"] } })
+      .where(and(eq(searchStages.searchId, id), eq(searchStages.stage, "collect")))
+      .run();
+    const scorePairs = vi.fn(async (_q: string, docs: readonly string[]) => docs.map((d) => (d.includes("Paper 4") ? 9 : 1)));
+    await stagesFor(db, { scorePairs }).rerank(makeCtx(db, id, "rerank"));
+    expect(scorePairs.mock.calls.flatMap((c) => c[1] as string[])).toHaveLength(3);
+    expect(row(id, "p4").rerank).toBeCloseTo(logitRelevance(9));
     expect(row(id, "p4").selected).toBe(true);
-    expect(row(id, "p2").selected).toBe(false);
+    expect(row(id, "p3").rerank).toBeNull();
   });
 
   it("refresh reuses base cross-encoder scores when the query hash matches", async () => {
@@ -244,14 +275,6 @@ describe("rerank", () => {
     const second = vi.fn(async (_q: string, docs: readonly string[]) => docs.map(() => 0.1));
     await stagesFor(db, { scorePairs: second }).rerank(makeCtx(db, id, "rerank"));
     expect(second).not.toHaveBeenCalled();
-    expect(row(id, "p1").rerank).toBe(0.7);
-  });
-
-  it("provisionalInfluence ranks log citations as midrank percentiles", () => {
-    const m = provisionalInfluence(new Map<string, number | null>([["a", 0], ["b", 10], ["c", 10], ["d", 1000], ["e", null]]));
-    expect(m.get("a")).toBe(0);
-    expect(m.get("b")).toBeCloseTo(0.5);
-    expect(m.get("d")).toBe(1);
-    expect(m.get("e")).toBeNull();
+    expect(row(id, "p1").rerank).toBeCloseTo(logitRelevance(0.7));
   });
 });

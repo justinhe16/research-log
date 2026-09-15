@@ -109,7 +109,31 @@ describe("influenceScores", () => {
   });
 });
 
+describe("influenceScores without some signals", () => {
+  it("drops a signal no row has and renormalizes the remaining weights", () => {
+    const rows: InfluenceRow[] = [
+      { id: "a", citationCount: 1, velocity: 1, influentialCitationCount: null, pagerank: null, maxAuthorHIndex: 1 },
+      { id: "b", citationCount: 9, velocity: 9, influentialCitationCount: null, pagerank: null, maxAuthorHIndex: 9 },
+    ];
+    const scores = influenceScores(rows);
+    // Without renormalization the top paper would cap at 1 - 0.15 - 0.2 = 0.65.
+    expect(scores.get("b")).toBeCloseTo(1, 9);
+    expect(scores.get("a")).toBe(0);
+  });
+});
+
 describe("gameChangerCandidates", () => {
+  it("uses citations in place of PageRank when no row has one", () => {
+    const rows = [
+      { id: "mid", citationCount: 100, velocity: 400, pagerank: null },
+      { id: "classic", citationCount: 1500, velocity: 450, pagerank: null },
+      { id: "hot", citationCount: 90, velocity: 500, pagerank: null },
+      { id: "quiet", citationCount: 5, velocity: 2, pagerank: null },
+    ];
+    // Median 95 excludes "hot"; classic = 0.5*1 + 0.5*(2/3), mid = 0.5*(2/3) + 0.5*(1/3).
+    expect(gameChangerCandidates(rows)).toEqual(["classic", "mid"]);
+  });
+
   it("only considers papers at or above the median citation count", () => {
     const rows = [
       { id: "low", citationCount: 1, velocity: 100, pagerank: 1 },

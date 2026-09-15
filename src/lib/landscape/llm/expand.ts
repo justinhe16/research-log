@@ -103,6 +103,8 @@ Given a research topic, you write search queries that together retrieve the core
 Rules:
 - Cover distinct facets: core method names, key synonyms and older terminology, major sub-problems, evaluation/benchmarks, and application angles that are genuinely part of the field.
 - Every query must be on-topic. No generic queries ("deep learning", "neural networks") that would flood results.
+- Stay inside the topic: each query must contain a core term of the topic, a direct synonym, or a sub-problem that only exists within it. Do not drift into neighbouring fields that merely share a word (e.g. for "sparse autoencoders for interpretability", no network pruning or lottery-ticket queries).
+- Include one query for the field's seminal, most-cited terminology (the names the foundational papers used).
 - Use the vocabulary papers actually use in titles and abstracts, including acronyms (e.g. "RLHF", "SAE").
 - Queries must differ in substance, not just word order.
 - arXiv categories must be real arXiv identifiers (cs.LG, cs.CL, cs.CV, cs.AI, stat.ML, cs.RO, cs.CR, ...).

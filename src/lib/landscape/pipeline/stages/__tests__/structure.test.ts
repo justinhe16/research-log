@@ -221,6 +221,20 @@ describe("graph stage", () => {
     const p0 = db.select().from(searchPapers).where(and(eq(searchPapers.searchId, SEARCH), eq(searchPapers.paperId, "p0"))).get()!;
     expect(p0.pagerank).toBe(1);
   });
+
+  it("stores null PageRank (not a uniform 1.0) when there are no citation edges", async () => {
+    db.delete(paperCitations).run();
+    const none = async () => new Map();
+    const stages = createStructureStages(deps({ batchAuthors: none, authorHIndex: none }));
+    const { ctx, logs } = fakeCtx();
+    await stages.graph!(ctx);
+    const rows = db.select().from(searchPapers).where(eq(searchPapers.searchId, SEARCH)).all();
+    expect(rows.every((r) => r.pagerank === null)).toBe(true);
+    // Influence still spans 0..1 from citations / velocity / influential / h-index.
+    expect(Math.max(...rows.map((r) => r.influence!))).toBeGreaterThan(0.9);
+    expect(rows.some((r) => r.gameChanger)).toBe(true);
+    expect(logs.some((l) => l.includes("0 local citations"))).toBe(true);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -520,6 +534,63 @@ describe("synthesize stage", () => {
     // Nothing left: no call.
     await stages.synthesize!(ctx);
     expect(runSynthesis).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("synthesize stage (empty-diff refresh)", () => {
+  const BASE = "base-search";
+  const baseDocs = {
+    clusters: { topicSummary: "SAEs.", clusters: [{ idx: 0, name: "Dictionary learning", summary: "Features.", keyIdeas: [], representativePaperIds: ["p0"] }] },
+    tensions: { tensions: [] },
+    gaps: { gaps: [] },
+    narrative: { eras: [], gameChangers: [], frontier: { summary: "x", paperIds: [] }, outlook: "y", whatChanged: null },
+    reading_path: { steps: [{ phase: "foundations", paperId: "p1", reason: "start" }] },
+  };
+
+  function setup(opts: { newPaper?: boolean } = {}) {
+    seedTopic();
+    seedPapers(6);
+    seedSearch(BASE, { status: "done", startedAt: "2026-04-01T00:00:00.000Z" });
+    seedSelection(BASE, ids(5));
+    seedSearch(SEARCH, { kind: "refresh", baseSearchId: BASE, startedAt: "2026-05-01T00:00:00.000Z" });
+    seedSelection(SEARCH, opts.newPaper ? [...ids(4), "p5"] : ids(5));
+    for (const sid of [BASE, SEARCH]) {
+      db.update(searchPapers).set({ clusterIdx: 0 }).where(eq(searchPapers.searchId, sid)).run();
+    }
+    for (const [kind, data] of Object.entries(baseDocs)) {
+      db.insert(searchDocuments).values({ searchId: BASE, kind: kind as never, status: "done", data, model: "claude-sonnet-5" }).run();
+    }
+    const diff = {
+      baseSearchId: BASE,
+      since: "2026-04-01",
+      newPaperIds: opts.newPaper ? ["p5"] : [],
+      droppedPaperIds: opts.newPaper ? ["p4"] : [],
+      rising: [],
+      clusterChanges: [{ idx: 0, baseIdxs: [0], change: "stable", label: "c0", sizeBefore: 5, sizeAfter: 5 }],
+    };
+    db.insert(searchDocuments).values({ searchId: SEARCH, kind: "diff", status: "done", data: diff }).run();
+  }
+
+  it("copies the base documents without calling the LLM when nothing changed", async () => {
+    setup();
+    const runSynthesis = vi.fn<StructureDeps["runSynthesis"]>();
+    const { ctx, counters, logs } = fakeCtx({ kind: "refresh", baseSearchId: BASE });
+    await createStructureStages(deps({ runSynthesis })).synthesize!(ctx);
+    expect(runSynthesis).not.toHaveBeenCalled();
+    const docs = new Map(db.select().from(searchDocuments).where(eq(searchDocuments.searchId, SEARCH)).all().map((d) => [d.kind, d]));
+    expect(docs.get("reading_path")).toMatchObject({ status: "done", data: baseDocs.reading_path, model: "claude-sonnet-5" });
+    expect(DOCUMENT_SCHEMAS.narrative.parse(docs.get("narrative")!.data).whatChanged).toMatch(/Nothing material changed/);
+    expect(counters).toMatchObject({ synthesisReused: 5, documentsDone: 5, documentsFailed: 0 });
+    expect(logs.some((l) => l.includes("reused 5 document(s)"))).toBe(true);
+  });
+
+  it("synthesizes normally when the selection changed", async () => {
+    setup({ newPaper: true });
+    const runSynthesis = vi.fn<StructureDeps["runSynthesis"]>(async () => ({ documents: {}, errors: {}, topicSummary: null, clusterLabels: {} }));
+    const { ctx, counters } = fakeCtx({ kind: "refresh", baseSearchId: BASE });
+    await createStructureStages(deps({ runSynthesis })).synthesize!(ctx);
+    expect(runSynthesis).toHaveBeenCalledTimes(1);
+    expect(counters.synthesisReused).toBeUndefined();
   });
 });
 

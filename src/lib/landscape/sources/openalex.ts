@@ -18,6 +18,7 @@
  */
 import type { Db } from "@/lib/db/create";
 import { API_CACHE_TTL_MS } from "../constants";
+import { STOPWORDS } from "../rank/stopwords";
 import { findArxivId, normalizeArxivId, normalizeDoi, normalizeOpenAlexId } from "../ids";
 import type { PaperAuthor, PaperInput } from "../types";
 import type { CachedHttpOptions } from "./http";
@@ -239,38 +240,81 @@ export type SearchOpenAlexOptions = OpenAlexRequestOptions & {
   limit: number;
   /** Only works published on/after this "YYYY-MM-DD". */
   since?: string | null;
+  /** `relevance` (default) or `citations` (most cited first: canonical-paper recall). */
+  sort?: "relevance" | "citations";
+  /** Every term OR-ed instead of OpenAlex's default all-terms match. */
+  relaxed?: boolean;
+  /** Called when an all-terms search found nothing and the OR-ed retry ran. */
+  onRelaxed?: (info: { query: string; relaxedResults: number }) => void;
 };
 
 export const OPENALEX_PER_PAGE_MAX = 200;
 
-/** Title/abstract search, most relevant first. `,` `|` `:` are filter syntax, so they're dropped from the query. */
-export function openAlexSearchUrl(query: string, opts: Pick<SearchOpenAlexOptions, "limit" | "since" | "mailto">): string | null {
-  const q = query.replace(/[,|:]+/g, " ").replace(/\s+/g, " ").trim();
+/** Search terms: filter syntax (`,` `|` `:`) and boolean-looking words dropped, stopwords removed
+ *  (falls back to the raw words when every word is a stopword). */
+export function openAlexSearchTerms(query: string): string[] {
+  const words = query
+    .replace(/[,|:()"]+/g, " ")
+    .split(/\s+/)
+    .map((w) => w.trim())
+    .filter((w) => w && !/^(AND|OR|NOT)$/.test(w));
+  const content = words.filter((w) => !STOPWORDS.has(w.toLowerCase()));
+  return content.length ? content : words;
+}
+
+/** Title/abstract search. `,` `|` `:` are filter syntax, so they're dropped from the query. */
+export function openAlexSearchUrl(
+  query: string,
+  opts: Pick<SearchOpenAlexOptions, "limit" | "since" | "mailto" | "sort" | "relaxed">,
+): string | null {
   const limit = Math.min(OPENALEX_PER_PAGE_MAX, Math.max(0, Math.floor(opts.limit)));
+  let q: string;
+  if (opts.relaxed) {
+    const terms = openAlexSearchTerms(query);
+    q = terms.length > 1 ? `(${terms.join(" OR ")})` : (terms[0] ?? "");
+  } else {
+    q = query.replace(/[,|:]+/g, " ").replace(/\s+/g, " ").trim();
+  }
   if (!q || limit === 0) return null;
   const filters = [`title_and_abstract.search:${q}`];
   if (opts.since && /^\d{4}-\d{2}-\d{2}/.test(opts.since)) filters.push(`from_publication_date:${opts.since.slice(0, 10)}`);
-  const params = new URLSearchParams({ filter: filters.join(","), sort: "relevance_score:desc", "per-page": String(limit) });
+  const sort = opts.sort === "citations" ? "cited_by_count:desc" : "relevance_score:desc";
+  const params = new URLSearchParams({ filter: filters.join(","), sort, "per-page": String(limit) });
   const mailto = (opts.mailto ?? process.env.OPENALEX_MAILTO ?? "").trim();
   if (mailto) params.set("mailto", mailto);
   return `${OPENALEX_API_BASE}/works?${params.toString()}`;
 }
 
 /**
- * Keyword search over titles and abstracts. Used by collect as a fallback when
- * arXiv and Semantic Scholar are both unavailable (e.g. rate limited without an S2 key).
+ * Keyword search over titles and abstracts. Used by collect as a fallback when arXiv and
+ * Semantic Scholar are both unavailable (e.g. rate limited without an S2 key), and sorted by
+ * citations for canonical-paper recall. OpenAlex matches every term, so a query with several
+ * terms that finds nothing is retried once with the terms OR-ed (mirrors arXiv's relaxed retry;
+ * callers re-rank the results locally, so the broader match is safe).
  */
 export async function searchOpenAlex(query: string, opts: SearchOpenAlexOptions): Promise<OpenAlexPaper[]> {
-  const url = openAlexSearchUrl(query, opts);
-  if (!url) return [];
-  const res = await request<OpenAlexList<OpenAlexRawWork>>(url, {
-    ...opts,
-    cache: opts.cache ? { ...opts.cache, ttlMs: opts.cache.ttlMs ?? API_CACHE_TTL_MS.search } : undefined,
-  });
-  const out: OpenAlexPaper[] = [];
-  for (const raw of Array.isArray(res?.results) ? res.results : []) {
-    const p = parseOpenAlexWork(raw);
-    if (p) out.push(p);
+  const run = async (relaxed: boolean): Promise<OpenAlexPaper[] | null> => {
+    const url = openAlexSearchUrl(query, { ...opts, relaxed });
+    if (!url) return null;
+    const res = await request<OpenAlexList<OpenAlexRawWork>>(url, {
+      ...opts,
+      cache: opts.cache ? { ...opts.cache, ttlMs: opts.cache.ttlMs ?? API_CACHE_TTL_MS.search } : undefined,
+    });
+    const out: OpenAlexPaper[] = [];
+    for (const raw of Array.isArray(res?.results) ? res.results : []) {
+      const p = parseOpenAlexWork(raw);
+      if (p) out.push(p);
+    }
+    return out;
+  };
+  const first = await run(opts.relaxed === true);
+  if (!first) return [];
+  if (first.length > 0 || opts.relaxed || openAlexSearchTerms(query).length < 2) return first;
+  const relaxed = (await run(true)) ?? [];
+  try {
+    opts.onRelaxed?.({ query, relaxedResults: relaxed.length });
+  } catch {
+    // A faulty warning sink must never break collection.
   }
-  return out;
+  return relaxed;
 }

@@ -262,6 +262,39 @@ export async function searchS2(query: string, opts: SearchS2Options): Promise<S2
   return out.slice(0, limit);
 }
 
+export type SearchS2ByCitationsOptions = S2RequestOptions & {
+  /** Max papers to return (one bulk page holds up to 1000). */
+  limit: number;
+  yearRange?: { from?: number | null; to?: number | null } | null;
+  fields?: readonly string[];
+};
+
+/**
+ * Most-cited papers matching `query` (S2 bulk search, `sort=citationCount:desc`): canonical-paper
+ * recall. Bulk search matches the keywords (no relevance ranking), so callers must gate results
+ * on topical similarity. One request; the continuation token is not followed.
+ */
+export async function searchS2ByCitations(query: string, opts: SearchS2ByCitationsOptions): Promise<S2Paper[]> {
+  const q = query.trim();
+  const limit = Math.min(Math.max(0, Math.floor(opts.limit)), 1000);
+  if (!q || limit === 0) return [];
+  const params = new URLSearchParams({ query: q, sort: "citationCount:desc", fields: fieldList(opts.fields) });
+  const year = s2YearParam(opts.yearRange);
+  if (year) params.set("year", year);
+  const page = await request<{ data?: S2RawPaper[] | null }>(
+    `${S2_API_BASE}/paper/search/bulk?${params.toString()}`,
+    API_CACHE_TTL_MS.search,
+    opts,
+  );
+  const out: S2Paper[] = [];
+  for (const raw of Array.isArray(page?.data) ? page.data : []) {
+    const p = parseS2Paper(raw);
+    if (p) out.push(p);
+    if (out.length >= limit) break;
+  }
+  return out;
+}
+
 /**
  * Metadata for many papers. Result is aligned with `ids` (null = unknown to S2).
  * Ids may be S2 paper ids, "ARXIV:2401.01234", "DOI:10.x/y", "CorpusId:123", ...

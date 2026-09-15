@@ -3,6 +3,7 @@ import { searchPapers } from "@/lib/db/schema";
 import { upsertPapers } from "@/lib/landscape/papers/repo";
 import type { ArxivWarning } from "@/lib/landscape/sources/arxiv";
 import type { ExpandedQuery, PaperInput } from "@/lib/landscape/types";
+import { canonicalIdsFrom, collectCanonical } from "./canonical";
 import {
   chunks,
   errMessage,
@@ -172,6 +173,8 @@ async function collectQuery(
         since,
         cache: { db },
         signal: ctx.signal,
+        onRelaxed: (info) =>
+          ctx.log(`collect q${qi}: OpenAlex found nothing matching every term; OR-relaxed retry found ${info.relaxedResults}`),
       });
       res.forEach((p, i) => hits.push({ input: p, rank: i, source: "openalex" }));
       openAlexOk = true;
@@ -226,9 +229,11 @@ async function applyPoolCap(env: Env, cp: CollectCheckpoint, queryCount: number)
     .orderBy(asc(searchPapers.sourceRank))
     .all();
   const cap = ctx.config.poolCap;
-  if (rows.length <= cap) return;
-
-  const present = new Set(rows.map((r) => r.paperId));
+  // Canonical-recall admissions sit outside the cap (a resumed collect re-applies it).
+  const canonical = new Set(canonicalIdsFrom(ctx.checkpoint));
+  const capped = rows.filter((r) => !canonical.has(r.paperId));
+  if (capped.length <= cap) return;
+  const present = new Set(capped.map((r) => r.paperId));
   const keep = new Set<string>();
   const lists = Array.from({ length: queryCount }, (_, qi) => (cp.lists[String(qi)] ?? []).filter((id) => present.has(id)));
   const cursor = lists.map(() => 0);
@@ -245,11 +250,11 @@ async function applyPoolCap(env: Env, cp: CollectCheckpoint, queryCount: number)
     }
   }
   // Rows not in any recorded list (e.g. merged into a new keeper id) fill leftover room by source rank.
-  for (const r of rows) {
+  for (const r of capped) {
     if (keep.size >= cap) break;
     keep.add(r.paperId);
   }
-  const drop = rows.map((r) => r.paperId).filter((id) => !keep.has(id));
+  const drop = capped.map((r) => r.paperId).filter((id) => !keep.has(id));
   for (const part of chunks(drop)) {
     db.delete(searchPapers)
       .where(and(eq(searchPapers.searchId, ctx.searchId), inArray(searchPapers.paperId, part)))
@@ -307,6 +312,8 @@ export async function collectStage(env: Env): Promise<void> {
   if (ctx.config.s2PerQuery > 0 && cp.failures.s2 >= n) warn(ctx, "Semantic Scholar failed for every query; results come from the other sources only");
 
   await applyPoolCap(env, cp, n);
+  ctx.setStageProgress(n / (n + 1) + 0.5 / (n + 1));
+  await collectCanonical(env, ctx.hasS2Key && ctx.config.s2PerQuery > 0 && !health.tripped.has("s2") && cp.failures.s2 < n);
   carryOver(env);
   ctx.updateCounters({ queries: n, fetched: cp.fetched, candidates: poolCount(env) });
   ctx.setStageProgress(1);

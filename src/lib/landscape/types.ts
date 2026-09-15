@@ -117,6 +117,13 @@ export type DepthConfig = {
   selectCount: number;
   /** Of `selectCount`, slots reserved for highly-cited older papers ranked lower on relevance. */
   foundationalReserve: number;
+  /** Of `selectCount`, slots reserved for the most relevant recent papers (published within
+   *  FRONTIER_MONTHS). Optional so older config snapshots stay valid; missing = 0. */
+  frontierReserve?: number;
+  /** Canonical-paper recall: collect also searches the topic sorted by citation count and admits
+   *  up to `maxAdmitted` works (of `perSource` fetched per source) whose cosine to the topic clears
+   *  CANONICAL_MIN_COSINE. Missing (older snapshots) = off. */
+  canonical?: { perSource: number; maxAdmitted: number };
   /** Selected papers additionally extracted from full text. */
   fulltextCount: number;
   kRange: { min: number; max: number };
@@ -185,6 +192,13 @@ export type SearchCounters = {
   llmCalls?: number;
   /** Refresh only. */
   newPapers?: number;
+  /** Canonical (citation-sorted) recall admissions. */
+  canonicalAdmitted?: number;
+  /** Expanded queries dropped for drifting off-topic. */
+  queriesDropped?: number;
+  /** Refresh with an empty diff: number of documents copied from the base search instead of
+   *  re-synthesized (0 or absent = synthesized normally). A number so every counter stays numeric. */
+  synthesisReused?: number;
 };
 
 // ---------------------------------------------------------------------------

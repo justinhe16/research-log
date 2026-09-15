@@ -149,9 +149,11 @@ function num(n: number | null | undefined, digits = 0): string {
   return digits ? n.toFixed(digits) : String(Math.round(n));
 }
 
-function metricsLine(p: DossierPaper, inDegree: number): string {
+/** PageRank is shown only when the search has a citation graph (some paper has a value). */
+function metricsLine(p: DossierPaper, inDegree: number, showPagerank: boolean): string {
   const m = p.metrics;
-  return `cites ${num(m.citationCount)} (infl ${num(m.influentialCitationCount)}) · vel ${num(m.velocity, 1)}/y · pr ${num(m.pagerank, 2)} · influence ${num(m.influence, 2)} · h ${num(m.maxAuthorHIndex)} · built-on-by ${inDegree}`;
+  const pr = showPagerank ? ` · pr ${num(m.pagerank, 2)}` : "";
+  return `cites ${num(m.citationCount)} (infl ${num(m.influentialCitationCount)}) · vel ${num(m.velocity, 1)}/y${pr} · influence ${num(m.influence, 2)} · h ${num(m.maxAuthorHIndex)} · built-on-by ${inDegree}`;
 }
 
 type Prepared = {
@@ -191,6 +193,7 @@ function prepare(input: DossierInput): Prepared {
 
 function render(input: DossierInput, prep: Prepared, caps: Caps): string {
   const { ordered, refOf, outAdj, inDegree } = prep;
+  const showPagerank = ordered.some((p) => p.metrics.pagerank != null && Number.isFinite(p.metrics.pagerank));
   const lines: string[] = [];
   const clusters = [...input.clusters].sort((a, b) => a.idx - b.idx);
   const members = new Map<number, string[]>();
@@ -205,7 +208,9 @@ function render(input: DossierInput, prep: Prepared, caps: Caps): string {
   if (input.topic.description) lines.push(`Topic description: ${clip(input.topic.description, 600)}`);
   lines.push(`Generated: ${input.generatedAt.slice(0, 10)} · ${ordered.length} papers · ${clusters.length} clusters`);
   lines.push(
-    "Card legend: cites = total citations (infl = influential citations); vel = citations per year; pr = PageRank within this set (0-1); influence = composite percentile (0-1); h = max author h-index; built-on-by = papers in this set that build on it.",
+    showPagerank
+      ? "Card legend: cites = total citations (infl = influential citations); vel = citations per year; pr = PageRank within this set (0-1); influence = composite percentile (0-1); h = max author h-index; built-on-by = papers in this set that build on it."
+      : "Card legend: cites = total citations (infl = influential citations); vel = citations per year; influence = composite percentile (0-1); h = max author h-index; built-on-by = papers in this set that build on it. No citation graph was available for this search, so there is no PageRank: judge influence by citations and velocity.",
   );
 
   lines.push("", "## Clusters");
@@ -222,7 +227,7 @@ function render(input: DossierInput, prep: Prepared, caps: Caps): string {
   lines.push("", "## Game-changer candidates (from citation metrics, highest influence first)");
   if (candidates.length === 0) lines.push("none");
   for (const p of candidates) {
-    lines.push(`${p.ref} (${dateOf(p)}) ${metricsLine(p, inDegree.get(p.paperId) ?? 0)}`);
+    lines.push(`${p.ref} (${dateOf(p)}) ${metricsLine(p, inDegree.get(p.paperId) ?? 0, showPagerank)}`);
   }
 
   lines.push("", "## Builds-on edges (paper -> the earlier papers it builds on)");
@@ -247,7 +252,7 @@ function render(input: DossierInput, prep: Prepared, caps: Caps): string {
       .filter(Boolean)
       .join(" · ");
     lines.push("", `[${p.ref}] ${clip(p.title, caps.title)} (${dateOf(p)}) · ${tags}`);
-    lines.push(metricsLine(p, inDegree.get(p.paperId) ?? 0));
+    lines.push(metricsLine(p, inDegree.get(p.paperId) ?? 0, showPagerank));
     const x = p.extraction;
     const field = (label: string, value: string | null | undefined, max: number) => {
       const v = clip(value, max);

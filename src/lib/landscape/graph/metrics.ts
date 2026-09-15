@@ -60,22 +60,29 @@ export type InfluenceRow = {
   maxAuthorHIndex: number | null;
 };
 
+const known = (v: number | null | undefined) => v != null && Number.isFinite(v);
+
 /**
  * Influence 0..1 = INFLUENCE_WEIGHTS-weighted blend of within-pool percentiles
  * (citations via log1p, velocity, influential citations, PageRank, max author h-index).
+ * A signal no row has (e.g. PageRank without citation edges, influential citations from
+ * OpenAlex-only metadata) drops out and the remaining weights are renormalized, so a
+ * missing source doesn't shrink every score by the same constant.
  */
 export function influenceScores(rows: InfluenceRow[]): Map<string, number> {
-  const cites = percentileRanks(rows.map((r) => (r.citationCount == null ? null : Math.log1p(Math.max(0, r.citationCount)))));
-  const vel = percentileRanks(rows.map((r) => r.velocity));
-  const infl = percentileRanks(rows.map((r) => r.influentialCitationCount));
-  const pr = percentileRanks(rows.map((r) => r.pagerank));
-  const h = percentileRanks(rows.map((r) => r.maxAuthorHIndex));
   const w = INFLUENCE_WEIGHTS;
-  const total = w.citations + w.velocity + w.influential + w.pagerank + w.hIndex;
+  const components: { weight: number; values: (number | null)[] }[] = [
+    { weight: w.citations, values: rows.map((r) => (r.citationCount == null ? null : Math.log1p(Math.max(0, r.citationCount)))) },
+    { weight: w.velocity, values: rows.map((r) => r.velocity) },
+    { weight: w.influential, values: rows.map((r) => r.influentialCitationCount) },
+    { weight: w.pagerank, values: rows.map((r) => r.pagerank) },
+    { weight: w.hIndex, values: rows.map((r) => r.maxAuthorHIndex) },
+  ].filter((c) => c.values.some(known));
+  const ranks = components.map((c) => percentileRanks(c.values));
+  const total = components.reduce((a, c) => a + c.weight, 0);
   const out = new Map<string, number>();
   rows.forEach((r, i) => {
-    const score =
-      (w.citations * cites[i] + w.velocity * vel[i] + w.influential * infl[i] + w.pagerank * pr[i] + w.hIndex * h[i]) / total;
+    const score = total > 0 ? components.reduce((a, c, k) => a + c.weight * ranks[k][i], 0) / total : 0;
     out.set(r.id, Math.min(1, Math.max(0, score)));
   });
   return out;
@@ -87,14 +94,17 @@ export type GameChangerRow = Pick<InfluenceRow, "id" | "citationCount" | "veloci
  * Game-changer candidates: among `rows` with citations >= the median of `rows`
  * (nulls count as 0), the top `count` by 0.5 * pagerank percentile + 0.5 *
  * velocity percentile (percentiles over all of `rows`; the graph stage passes
- * only selected papers). Ties break by id. Returns ids.
+ * only selected papers). When no row has a PageRank (no citation edges), the
+ * log-citation percentile takes PageRank's half. Ties break by id. Returns ids.
  */
 export function gameChangerCandidates(
   rows: GameChangerRow[],
   { count = GAME_CHANGER_CANDIDATES }: { count?: number } = {},
 ): string[] {
   if (rows.length === 0 || count <= 0) return [];
-  const pr = percentileRanks(rows.map((r) => r.pagerank));
+  const pr = rows.some((r) => known(r.pagerank))
+    ? percentileRanks(rows.map((r) => r.pagerank))
+    : percentileRanks(rows.map((r) => (r.citationCount == null ? null : Math.log1p(Math.max(0, r.citationCount)))));
   const vel = percentileRanks(rows.map((r) => r.velocity));
   const cites = rows.map((r) => r.citationCount ?? 0);
   const med = median(cites);

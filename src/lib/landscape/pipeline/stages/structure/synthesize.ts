@@ -113,8 +113,19 @@ export async function synthesizeStage(
   const db = await resolveDb(ctx, deps);
   const existing = documentStatuses(db, ctx.searchId);
   // retryDocuments seeds the checkpoint with { retryKinds } to limit a retry.
-  const wanted = opts.kinds ?? retryKindsFrom(ctx.checkpoint) ?? SYNTHESIZED_KINDS;
-  const pending = wanted.filter((k) => existing.get(k)?.status !== "done");
+  const retryKinds = retryKindsFrom(ctx.checkpoint);
+  const wanted = opts.kinds ?? retryKinds ?? SYNTHESIZED_KINDS;
+  let pending = wanted.filter((k) => existing.get(k)?.status !== "done");
+
+  // Refresh that changed nothing: carry the base documents over instead of paying for synthesis.
+  if (pending.length && !opts.kinds && !retryKinds && ctx.kind === "refresh" && ctx.baseSearchId) {
+    const reused = reuseBaseDocuments(db, ctx, deps, existing, pending);
+    if (reused > 0) {
+      ctx.updateCounters({ synthesisReused: reused });
+      ctx.log(`synthesize: nothing changed since the base search; reused ${reused} document(s) without LLM calls`);
+      pending = pending.filter((k) => documentStatuses(db, ctx.searchId).get(k)?.status !== "done");
+    }
+  }
 
   if (pending.length) {
     const failures = await runPending(db, ctx, deps, pending, existing);
@@ -148,6 +159,75 @@ export async function synthesizeStage(
     documentsFailed: synthesized.filter((s) => s === "error").length,
   });
   ctx.setStageProgress(1);
+}
+
+/** Base-search selection as paperId -> clusterIdx. */
+function selectionClusters(db: Db, searchId: string): Map<string, number | null> {
+  return new Map(
+    db
+      .select({ paperId: searchPapers.paperId, clusterIdx: searchPapers.clusterIdx })
+      .from(searchPapers)
+      .where(and(eq(searchPapers.searchId, searchId), eq(searchPapers.selected, true)))
+      .all()
+      .map((r) => [r.paperId, r.clusterIdx]),
+  );
+}
+
+export const UNCHANGED_WHAT_CHANGED =
+  "Nothing material changed since the previous search: no new or dropped papers and no cluster changes, so this landscape carries over unchanged.";
+
+/**
+ * Empty-diff refresh: when the diff has no new/dropped papers and every cluster is stable,
+ * the selection and each paper's cluster idx are identical to the base search, and the base
+ * has every pending kind done, copy those documents (narrative.whatChanged is set to a fixed
+ * "nothing changed" note, mentioning rising papers when the diff has any). Returns the number
+ * copied (0 = conditions not met; synthesis runs normally).
+ */
+export function reuseBaseDocuments(
+  db: Db,
+  ctx: Pick<StageContext, "searchId" | "baseSearchId">,
+  deps: Pick<StructureDeps, "now">,
+  existing: Map<DocumentKind, { status: "done" | "error"; data: unknown }>,
+  pending: readonly SynthesizedKind[],
+): number {
+  if (!ctx.baseSearchId) return 0;
+  const diffRow = existing.get("diff");
+  const diff = diffRow?.status === "done" ? DOCUMENT_SCHEMAS.diff.safeParse(diffRow.data) : null;
+  if (!diff?.success) return 0;
+  const d = diff.data;
+  if (d.baseSearchId !== ctx.baseSearchId || d.newPaperIds.length || d.droppedPaperIds.length) return 0;
+  if (d.clusterChanges.some((c) => c.change !== "stable")) return 0;
+
+  const base = selectionClusters(db, ctx.baseSearchId);
+  const current = selectionClusters(db, ctx.searchId);
+  if (base.size === 0 || base.size !== current.size) return 0;
+  for (const [id, idx] of current) if (!base.has(id) || base.get(id) !== idx) return 0;
+
+  const baseDocs = new Map(
+    db
+      .select()
+      .from(searchDocuments)
+      .where(eq(searchDocuments.searchId, ctx.baseSearchId))
+      .all()
+      .map((r) => [r.kind, r]),
+  );
+  const copies: { kind: SynthesizedKind; data: unknown; model: string | null }[] = [];
+  for (const kind of pending) {
+    const row = baseDocs.get(kind);
+    if (row?.status !== "done") return 0;
+    const parsed = DOCUMENT_SCHEMAS[kind].safeParse(row.data);
+    if (!parsed.success) return 0;
+    let data: unknown = parsed.data;
+    if (kind === "narrative") {
+      const rising = d.rising.length ? ` ${d.rising.length} paper(s) gained notable citations.` : "";
+      data = { ...(parsed.data as Record<string, unknown>), whatChanged: `${UNCHANGED_WHAT_CHANGED}${rising}` };
+    }
+    copies.push({ kind, data, model: row.model });
+  }
+  db.$client.transaction(() => {
+    for (const c of copies) upsertDocument(db, ctx.searchId, c.kind, { status: "done", data: c.data, model: c.model }, deps.now());
+  })();
+  return copies.length;
 }
 
 function retryKindsFrom(checkpoint: Record<string, unknown> | null): SynthesizedKind[] | null {

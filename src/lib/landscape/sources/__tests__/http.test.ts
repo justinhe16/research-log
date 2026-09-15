@@ -4,6 +4,7 @@ import { apiCache } from "@/lib/db/schema";
 import { RATE_LIMITS } from "@/lib/landscape/constants";
 import {
   HttpError,
+  PENALTY_DECAY_MS,
   ResponseTooLargeError,
   UnsafeUrlError,
   assertPublicUrl,
@@ -185,6 +186,46 @@ describe("requests", () => {
     );
     await fetchJson("https://api.openalex.org/works", { host: "test" });
     expect(clock.sleeps).toContain(7000);
+  });
+
+  it("backs off at least 10s on an arXiv 429 and doubles the host spacing for later requests", async () => {
+    const clock = virtualTime();
+    const starts: number[] = [];
+    let n = 0;
+    mockFetch(() => {
+      starts.push(clock.now());
+      return ++n === 1 ? new Response("Rate exceeded", { status: 429 }) : new Response("ok");
+    });
+    await fetchText("https://export.arxiv.org/api/query?a");
+    expect(clock.sleeps).toContain(10_000);
+    expect(starts[1] - starts[0]).toBe(10_000);
+    const queue = hostQueue("arxiv", hostConfig("arxiv"));
+    expect(queue.intervalMs()).toBe(RATE_LIMITS.arxiv * 2);
+    await fetchText("https://export.arxiv.org/api/query?b");
+    expect(starts[2] - starts[1]).toBe(RATE_LIMITS.arxiv * 2);
+  });
+
+  it("uses a longer Retry-After, caps the doubled spacing and decays it", async () => {
+    const clock = virtualTime();
+    const queue = hostQueue("arxiv", hostConfig("arxiv"));
+    expect(queue.penalize(30_000)).toBe(30_000);
+    queue.penalize(0);
+    queue.penalize(0);
+    expect(queue.intervalMs()).toBe(10_000); // 3100 * 8 capped
+    clock.advance(PENALTY_DECAY_MS + 1);
+    expect(queue.intervalMs()).toBe(RATE_LIMITS.arxiv);
+    // Unknown hosts: no minimum, 4x cap.
+    const other = hostQueue("example.org", hostConfig("example.org"));
+    expect(other.penalize(100)).toBe(100);
+    for (let i = 0; i < 5; i++) other.penalize(0);
+    expect(other.intervalMs()).toBe(RATE_LIMITS.pdf * 4);
+  });
+
+  it("penalizes the host when a 429 exhausts the retries", async () => {
+    virtualTime();
+    mockFetch(() => new Response("", { status: 429 }));
+    await expect(fetchText("https://export.arxiv.org/api/query?c")).rejects.toBeInstanceOf(HttpError);
+    expect(hostQueue("arxiv", hostConfig("arxiv")).intervalMs()).toBe(10_000);
   });
 
   it("honours Retry-After dates", () => {

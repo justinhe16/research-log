@@ -33,6 +33,9 @@
  * call time. Retries on 429 / 5xx / network errors / timeouts: 1 + HTTP_MAX_RETRIES
  * attempts, backoff 2·HTTP_BACKOFF_BASE_MS·2^n + jitter, or Retry-After (seconds or
  * HTTP-date) when the server sends it. The limiter slot is released during backoff.
+ * Adaptive rate-limit penalty: a 429 pushes the host's next start past the wait (at least
+ * `RATE_LIMIT_PENALTY[host].minBackoffMs`) for every caller, and doubles the host's spacing
+ * (capped at `maxIntervalMs`) until PENALTY_DECAY_MS pass without another 429.
  */
 import { createHash } from "node:crypto";
 import { lookup as dnsLookup } from "node:dns/promises";
@@ -45,6 +48,7 @@ import {
   HTTP_MAX_RETRIES,
   HTTP_TIMEOUT_MS,
   PDF_MAX_BYTES,
+  RATE_LIMIT_PENALTY,
   RATE_LIMITS,
 } from "../constants";
 
@@ -125,16 +129,50 @@ export interface HostQueueConfig {
   concurrency: number;
 }
 
+export interface RateLimitPenaltyConfig {
+  /** Minimum wait after a 429, even when Retry-After is shorter or absent. */
+  minBackoffMs: number;
+  /** Cap for the doubled spacing. */
+  maxIntervalMs: number;
+}
+
+/** A penalty level resets once this long passes without another 429. */
+export const PENALTY_DECAY_MS = 10 * 60_000;
+
 /** Semaphore + start-time spacing. Config is mutable so callers can refresh it per call. */
 export class HostQueue {
   private active = 0;
   private waiters: (() => void)[] = [];
   private nextStartAt = 0;
+  private penaltyLevel = 0;
+  private lastPenaltyAt = 0;
 
   constructor(
     readonly name: string,
     public config: HostQueueConfig,
   ) {}
+
+  /** Current spacing: the configured interval, doubled per recent 429, capped. */
+  intervalMs(penalty: RateLimitPenaltyConfig = hostPenalty(this.name, this.config)): number {
+    const base = this.config.minIntervalMs;
+    if (this.penaltyLevel > 0 && deps.now() - this.lastPenaltyAt > PENALTY_DECAY_MS) this.penaltyLevel = 0;
+    if (this.penaltyLevel === 0) return base;
+    return Math.max(base, Math.min(penalty.maxIntervalMs, base * 2 ** this.penaltyLevel));
+  }
+
+  /**
+   * Record a 429: every caller's next start moves to at least now + the returned wait, and
+   * the spacing doubles. Returns the wait (max of Retry-After / backoff and the host minimum).
+   */
+  penalize(suggestedWaitMs: number, penalty: RateLimitPenaltyConfig = hostPenalty(this.name, this.config)): number {
+    const now = deps.now();
+    if (now - this.lastPenaltyAt > PENALTY_DECAY_MS) this.penaltyLevel = 0;
+    this.penaltyLevel = Math.min(this.penaltyLevel + 1, 16);
+    this.lastPenaltyAt = now;
+    const wait = Math.max(suggestedWaitMs, penalty.minBackoffMs);
+    this.nextStartAt = Math.max(this.nextStartAt, now + wait);
+    return wait;
+  }
 
   /** Run `fn` once a slot is free and the minimum interval has elapsed. */
   async run<T>(fn: () => Promise<T>): Promise<T> {
@@ -143,7 +181,7 @@ export class HostQueue {
       const now = deps.now();
       const startAt = Math.max(now, this.nextStartAt);
       // Reserve the start time synchronously so concurrent callers can't share it.
-      this.nextStartAt = startAt + this.config.minIntervalMs;
+      this.nextStartAt = startAt + this.intervalMs();
       if (startAt > now) await deps.sleep(startAt - now);
       return await fn();
     } finally {
@@ -204,6 +242,12 @@ export function hostConfig(host: string): HostQueueConfig {
     default:
       return { minIntervalMs: RATE_LIMITS.pdf, concurrency: 1 };
   }
+}
+
+/** 429 penalty settings for a host (RATE_LIMIT_PENALTY, else plain backoff and a 4x cap). */
+export function hostPenalty(host: string, config: HostQueueConfig = hostConfig(host)): RateLimitPenaltyConfig {
+  const known = (RATE_LIMIT_PENALTY as Record<string, RateLimitPenaltyConfig>)[host];
+  return known ?? { minBackoffMs: 0, maxIntervalMs: config.minIntervalMs * 4 };
 }
 
 /** Limiter bucket for a URL. */
@@ -317,7 +361,8 @@ async function send<T>(
     const isLast = attempt >= HTTP_MAX_RETRIES;
     let retryDelay: number;
     try {
-      const outcome = await hostQueue(host, hostConfig(host)).run(async () => {
+      const queue = hostQueue(host, hostConfig(host));
+      const outcome = await queue.run(async () => {
         const timeout = AbortSignal.timeout(timeoutMs);
         const signal = opts.signal ? AbortSignal.any([opts.signal, timeout]) : timeout;
         const res = await deps.fetch(url, { ...init, signal });
@@ -325,14 +370,20 @@ async function send<T>(
           return { done: true as const, value: await consume(res) };
         }
         const text = await res.text().catch(() => "");
+        if (res.status === 429 && isLast) {
+          // Out of retries: still slow the host down for the callers after us.
+          queue.penalize(parseRetryAfter(res.headers.get("retry-after"), deps.now()) ?? backoffMs(attempt));
+        }
         if (!isRetryableStatus(res.status) || isLast) throw new HttpError(res.status, url, text);
         return {
           done: false as const,
+          status: res.status,
           retryAfter: parseRetryAfter(res.headers.get("retry-after"), deps.now()),
         };
       });
       if (outcome.done) return outcome.value;
       retryDelay = outcome.retryAfter ?? backoffMs(attempt);
+      if (outcome.status === 429) retryDelay = queue.penalize(retryDelay);
     } catch (err) {
       if (opts.signal?.aborted) throw err;
       if (

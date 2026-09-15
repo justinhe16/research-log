@@ -146,7 +146,10 @@ export async function graphStage(ctx: StageContext, deps: StructureDeps): Promis
     citations.map((c) => ({ source: c.citing, target: c.cited })),
   );
   const prMax = Math.max(0, ...pr.values());
-  const prNorm = new Map([...pr].map(([id, v]) => [id, prMax > 0 ? v / prMax : 0]));
+  // Without citation edges PageRank is uniform (every paper 1.0 after normalization), which
+  // reads as a real signal downstream. Store null instead: "no citation graph".
+  const hasGraph = citations.length > 0;
+  const prNorm = new Map([...pr].map(([id, v]) => [id, hasGraph && prMax > 0 ? v / prMax : null]));
   ctx.throwIfCancelled();
   await yieldLoop();
 
@@ -159,7 +162,7 @@ export async function graphStage(ctx: StageContext, deps: StructureDeps): Promis
       influentialCitationCount: p.paper.influentialCitationCount ?? p.spInfluential,
       maxAuthorHIndex: p.paper.maxAuthorHIndex ?? p.spMaxAuthorHIndex,
       velocity: velocity(citationCount, pubDate(p.paper), now),
-      pagerank: prNorm.get(p.paperId) ?? 0,
+      pagerank: prNorm.get(p.paperId) ?? null,
     };
   });
   const influence = influenceScores(metrics);

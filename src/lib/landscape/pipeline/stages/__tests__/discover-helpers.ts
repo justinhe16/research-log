@@ -181,6 +181,7 @@ export function fakeDeps(db: Db, overrides: Partial<DiscoverDeps> = {}): Discove
     expandQueries: unexpected("expandQueries"),
     searchArxiv: async () => [],
     searchS2: async () => [],
+    searchS2ByCitations: async () => [],
     s2References: async () => [],
     s2Citations: async () => [],
     s2BatchPapers: async (ids) => ids.map(() => null),

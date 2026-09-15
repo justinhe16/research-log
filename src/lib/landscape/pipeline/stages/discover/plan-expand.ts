@@ -1,8 +1,11 @@
 import { eq } from "drizzle-orm";
 import { searches } from "@/lib/db/schema";
+import { cosine } from "@/lib/embedding";
+import { EXPAND_MAX_DROP_SHARE, EXPAND_MIN_COSINE } from "@/lib/landscape/constants";
 import { buildArxivQuery } from "@/lib/landscape/sources/arxiv";
 import { DEPTHS, type DepthConfig, type ExpandedQuery } from "@/lib/landscape/types";
 import { fallbackQueries, queryKey, type ExpansionResult } from "@/lib/landscape/llm/expand";
+import { topicEmbeddingText } from "@/lib/landscape/topic-dedupe";
 import { cleanText } from "@/lib/sanitize";
 import {
   errMessage,
@@ -95,6 +98,49 @@ export function buildQueryList(name: string, expansion: ExpansionResult): Expand
   return [head, ...rest];
 }
 
+/**
+ * Indices (into `similarities`) of expanded queries to drop as off-topic drift: cosine to the
+ * topic below `minCosine`, lowest first, at most `maxDropShare` of the queries. Pure.
+ */
+export function driftedQueries(
+  similarities: readonly number[],
+  minCosine: number = EXPAND_MIN_COSINE,
+  maxDropShare: number = EXPAND_MAX_DROP_SHARE,
+): number[] {
+  const maxDrop = Math.floor(similarities.length * maxDropShare);
+  return similarities
+    .map((sim, i) => ({ sim, i }))
+    .filter((x) => !(x.sim >= minCosine))
+    .sort((a, b) => a.sim - b.sim || a.i - b.i)
+    .slice(0, maxDrop)
+    .map((x) => x.i)
+    .sort((a, b) => a - b);
+}
+
+/** Drop drifted expanded queries (query 0, the topic name, always stays). Embedding failures keep everything. */
+async function dropDriftedQueries(env: Env, name: string, description: string | null, queries: ExpandedQuery[]): Promise<ExpandedQuery[]> {
+  const { ctx, deps } = env;
+  if (queries.length <= 1) return queries;
+  const expanded = queries.slice(1);
+  let vectors: Float32Array[];
+  try {
+    vectors = await deps.embedMany([topicEmbeddingText(name, description), ...expanded.map((q) => q.text)]);
+  } catch (err) {
+    rethrowIfCancelled(ctx, err);
+    warn(ctx, `query drift check skipped: ${errMessage(err)}`);
+    return queries;
+  }
+  const [topicVec, ...queryVecs] = vectors;
+  if (!topicVec || queryVecs.length !== expanded.length) return queries;
+  const sims = queryVecs.map((v) => cosine(topicVec, v));
+  const drop = new Set(driftedQueries(sims));
+  for (const i of drop) {
+    warn(ctx, `dropped off-topic expanded query "${expanded[i].text}" (similarity ${sims[i].toFixed(2)} to the topic)`);
+  }
+  if (drop.size) ctx.updateCounters({ queriesDropped: drop.size });
+  return [queries[0], ...expanded.filter((_, i) => !drop.has(i))];
+}
+
 /** Stage 2: one Haiku call; fallback to the topic name. Skipped on refresh (base queries reused). */
 export async function expandStage(env: Env): Promise<void | "skipped"> {
   const { ctx, db, deps } = env;
@@ -131,7 +177,10 @@ export async function expandStage(env: Env): Promise<void | "skipped"> {
     fallback = true;
   }
 
-  const queries = fallback ? expansion.queries : buildQueryList(topic.name, expansion);
+  const queries = fallback
+    ? expansion.queries
+    : await dropDriftedQueries(env, topic.name, topic.description, buildQueryList(topic.name, expansion));
+  ctx.throwIfCancelled();
   db.update(searches).set({ queries }).where(eq(searches.id, ctx.searchId)).run();
   ctx.saveCheckpoint({
     done: true,
