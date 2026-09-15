@@ -1,0 +1,63 @@
+import { formatDistanceToNowStrict } from "date-fns";
+
+import { ApiError } from "@/lib/landscape/api-client";
+import type { SearchKind, SearchStatus } from "@/lib/landscape/types";
+
+export function relativeTime(iso: string | null | undefined): string | null {
+  if (!iso) return null;
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return null;
+  return formatDistanceToNowStrict(date, { addSuffix: true });
+}
+
+export function formatUsd(value: number | null | undefined): string {
+  if (value === null || value === undefined || !Number.isFinite(value)) return "—";
+  if (value === 0) return "$0";
+  if (value < 0.01) return "<$0.01";
+  return `$${value < 10 ? value.toFixed(2) : value.toFixed(0)}`;
+}
+
+export function formatUsdRange(low: number, high: number): string {
+  return `${formatUsd(low)}–${formatUsd(high).replace("$", "")}`;
+}
+
+export function formatMinutesRange(low: number, high: number): string {
+  const lo = Math.max(1, Math.round(low));
+  const hi = Math.max(lo, Math.round(high));
+  return lo === hi ? `~${lo} min` : `${lo}–${hi} min`;
+}
+
+const compact = new Intl.NumberFormat("en", { notation: "compact", maximumFractionDigits: 1 });
+export function formatCount(value: number | null | undefined): string {
+  if (value === null || value === undefined || !Number.isFinite(value)) return "—";
+  return value >= 10_000 ? compact.format(value) : Math.round(value).toLocaleString("en");
+}
+
+export function formatPercent(value: number | null | undefined): string {
+  if (value === null || value === undefined || !Number.isFinite(value)) return "—";
+  return `${Math.round(value * 100)}`;
+}
+
+export const SEARCH_KIND_LABELS: Record<SearchKind, string> = {
+  initial: "First search",
+  refresh: "Refresh",
+  full: "Full re-run",
+};
+
+export const SEARCH_STATUS_LABELS: Record<SearchStatus, string> = {
+  queued: "Queued",
+  running: "Running",
+  done: "Done",
+  error: "Failed",
+  cancelled: "Cancelled",
+  interrupted: "Interrupted",
+};
+
+export function errorMessage(err: unknown, fallback: string): string {
+  if (err instanceof ApiError) {
+    if (err.status === 501) return "The Landscape API is not implemented yet. Add ?fixture=1 to preview with sample data.";
+    return err.message;
+  }
+  if (err instanceof Error && err.message) return err.message;
+  return fallback;
+}

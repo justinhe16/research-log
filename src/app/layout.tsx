@@ -18,9 +18,12 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Research Log",
+  title: {
+    template: "%s · Research Log",
+    default: "Research Log",
+  },
   description:
-    "A personal log of papers, posts, and threads worth remembering — summarized, tagged, and searchable.",
+    "Log what you read, and map ML research fields into clusters, tensions, and a reading path.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

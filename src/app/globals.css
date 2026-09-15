@@ -20,6 +20,11 @@
   --color-sidebar-primary: var(--sidebar-primary);
   --color-sidebar-foreground: var(--sidebar-foreground);
   --color-sidebar: var(--sidebar);
+  --color-chart-10: var(--chart-10);
+  --color-chart-9: var(--chart-9);
+  --color-chart-8: var(--chart-8);
+  --color-chart-7: var(--chart-7);
+  --color-chart-6: var(--chart-6);
   --color-chart-5: var(--chart-5);
   --color-chart-4: var(--chart-4);
   --color-chart-3: var(--chart-3);
@@ -78,6 +83,12 @@
   --chart-3: oklch(0.68 0.14 70);
   --chart-4: oklch(0.63 0.16 330);
   --chart-5: oklch(0.6 0.15 25);
+  /* 6-10 interleave the first five hues so adjacent cluster slots stay distinct. */
+  --chart-6: oklch(0.58 0.14 300);
+  --chart-7: oklch(0.64 0.14 145);
+  --chart-8: oklch(0.64 0.11 225);
+  --chart-9: oklch(0.7 0.14 50);
+  --chart-10: oklch(0.62 0.12 355);
   --sidebar: oklch(0.985 0.001 286);
   --sidebar-foreground: oklch(0.17 0.006 285);
   --sidebar-primary: oklch(0.21 0.006 285);
@@ -112,6 +123,11 @@
   --chart-3: oklch(0.74 0.14 70);
   --chart-4: oklch(0.69 0.16 330);
   --chart-5: oklch(0.66 0.16 25);
+  --chart-6: oklch(0.66 0.14 300);
+  --chart-7: oklch(0.7 0.14 145);
+  --chart-8: oklch(0.7 0.11 225);
+  --chart-9: oklch(0.76 0.14 50);
+  --chart-10: oklch(0.69 0.13 355);
   --sidebar: oklch(0.185 0.005 286);
   --sidebar-foreground: oklch(0.975 0.002 286);
   --sidebar-primary: oklch(0.62 0.14 264);
