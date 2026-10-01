@@ -64,7 +64,7 @@ export function EntryDetailDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         showCloseButton
-        className="flex max-h-[86vh] w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-3xl"
+        className="flex max-h-[88vh] w-full flex-col gap-0 overflow-hidden rounded-2xl p-0 sm:max-w-3xl [&>[data-slot=dialog-close]]:top-4 [&>[data-slot=dialog-close]]:right-4"
       >
         {entry ? (
           <EntryDetailBody
@@ -77,7 +77,7 @@ export function EntryDetailDialog({
             onClose={() => onOpenChange(false)}
           />
         ) : (
-          <div className="p-6">
+          <div className="px-6 py-10 sm:px-12">
             <DialogTitle className="sr-only">Entry</DialogTitle>
             <Skeleton className="h-5 w-64" />
           </div>
@@ -167,8 +167,8 @@ function EntryDetailBody({
 
   return (
     <>
-      <DialogHeader className="border-border/60 gap-2 border-b px-6 py-5 pr-12">
-        <DialogTitle className="text-lg leading-snug font-medium">
+      <DialogHeader className="border-border/50 gap-3 border-b px-6 pt-9 pb-6 pr-14 sm:px-12 sm:pt-11 sm:pb-7">
+        <DialogTitle className="text-xl leading-snug font-medium tracking-tight text-balance sm:text-[22px]">
           <a
             href={entry.url}
             target="_blank"
@@ -211,7 +211,7 @@ function EntryDetailBody({
       </DialogHeader>
 
       <div className="min-h-0 flex-1 overflow-y-auto">
-        <div className="flex flex-col gap-7 px-6 py-6">
+        <div className="flex flex-col gap-9 px-6 py-8 sm:gap-10 sm:px-12 sm:py-10">
           {errored ? (
             <div className="border-destructive/25 bg-destructive/5 text-destructive flex items-start gap-2.5 rounded-lg border p-3">
               <TriangleAlertIcon className="mt-0.5 size-4 shrink-0" />
@@ -372,7 +372,7 @@ function EntryDetailBody({
       </div>
 
       {/* --- Footer --- */}
-      <div className="bg-muted/30 border-border/60 flex items-center justify-between gap-2 border-t px-4 py-3">
+      <div className="bg-muted/30 border-border/50 flex items-center justify-between gap-2 border-t px-6 py-4 sm:px-12">
         <div className="flex items-center gap-2">
           {confirmDelete ? (
             <>
@@ -442,7 +442,7 @@ function Dot() {
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section className="flex flex-col gap-2.5">
+    <section className="flex flex-col gap-3">
       <h3 className="text-muted-foreground text-[11px] font-medium tracking-[0.08em] uppercase">
         {title}
       </h3>

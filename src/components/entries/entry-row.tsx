@@ -122,16 +122,17 @@ export function EntryRow({ entry, onOpen, onRetry }: EntryRowProps) {
       </TableCell>
 
       {/* Tags — deliberately quieter than the category */}
-      <TableCell className={`${CELL} hidden lg:table-cell`}>
+      {/* max-w-0 + nowrap: tags share the leftover width on one line, truncating rather than wrapping the row taller */}
+      <TableCell className={`${CELL} hidden max-w-0 lg:table-cell`}>
         {entry.tags.length === 0 ? (
           <span className="text-muted-foreground/50 text-xs">—</span>
         ) : (
-          <div className="flex flex-wrap items-center gap-1">
+          <div className="flex min-w-0 items-center gap-1 overflow-hidden">
             {visibleTags.map((tag, ti) => (
               <Badge
                 key={`${ti}-${tag}`}
                 variant="outline"
-                className="border-border/60 text-muted-foreground max-w-32 rounded-md px-1.5 text-[11px] font-normal"
+                className="border-border/60 text-muted-foreground max-w-32 min-w-0 shrink rounded-md px-1.5 text-[11px] font-normal"
               >
                 <span className="truncate">{tag}</span>
               </Badge>

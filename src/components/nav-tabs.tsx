@@ -28,7 +28,7 @@ export function NavTabs({ className }: { className?: string }) {
               "flex h-7 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium transition-colors outline-none",
               "focus-visible:ring-ring/50 focus-visible:ring-[3px]",
               active
-                ? "bg-background text-foreground dark:bg-input/40 shadow-sm"
+                ? "bg-input text-foreground shadow-sm"
                 : "text-muted-foreground hover:text-foreground",
             )}
           >
